@@ -446,10 +446,16 @@ const rewriter = function(CONFIG) {
 	*
 	* @argObj {Array} args array of arguments
 	**/
-	function printArgs(argObj) {
+	function printArgs(argObj, thisArg) {
 		const argFormat = CONFIG.formats.args;
 		if (!argFormat.use) return;
 		const func = argFormat.open ? real.logGroup : real.logGroupCollapsed;
+
+		if (thisArg && thisArg !== window) {
+			real.logGroupCollapsed("%carg[this]: %s: ", argFormat.default, thisArg.constructor.name);
+			real.log(thisArg);
+			real.logGroupCollapsed();
+		}
 
 		function printFuncAlso(arg) {
 			if (arg.type === "function" && arg.orig) {
@@ -604,7 +610,7 @@ const rewriter = function(CONFIG) {
 	* @param {array}	args array of arguments
 	* @returns {boolean} Always returns `false`
 	**/
-	function EvalVillainHook(intrBundle, name, args) {
+	function EvalVillainHook(intrBundle, name, args, thisArg) {
 		const fmts = CONFIG.formats;
 		let argObj = {};
 		try {
@@ -640,7 +646,7 @@ const rewriter = function(CONFIG) {
 		}
 
 		const titleGrp = printTitle(name, format, argObj.len);
-		printArgs(argObj);
+		printArgs(argObj, thisArg);
 
 		// print all intereresting reuslts
 		printers.forEach(x=>x());
@@ -669,14 +675,14 @@ const rewriter = function(CONFIG) {
 		}
 
 		// Start of Eval Villain hook
-		apply(_target, _thisArg, args) {
-			EvalVillainHook(self.intr, this.evname, args);
+		apply(_target, thisArg, args) {
+			EvalVillainHook(self.intr, this.evname, args, thisArg);
 			return Reflect.apply(...arguments);
 		}
 
 		// Start of Eval Villain hook
 		construct(_target, args, _newArg) {
-			EvalVillainHook(self.intr, this.evname, args);
+			EvalVillainHook(self.intr, this.evname, args, null);
 			return Reflect.construct(...arguments);
 		}
 	}
