@@ -351,7 +351,7 @@ async function getConfigForRegister() {
 	}
 
 	for (const what of ["needles", "blacklist", "functions", "types"]) {
-		config[what] = config[what] = dbconf[what]
+		config[what] = dbconf[what]
 			.filter(x => x.enabled)
 			.map(x => x.pattern);
 	}
