@@ -669,24 +669,6 @@ const rewriter = function(CONFIG) {
 		return false;
 	}
 
-	class evProxy {
-		constructor(intr) {
-			self.intr = intr;
-		}
-
-		// Start of Eval Villain hook
-		apply(_target, thisArg, args) {
-			EvalVillainHook(self.intr, this.evname, args, thisArg);
-			return Reflect.apply(...arguments);
-		}
-
-		// Start of Eval Villain hook
-		construct(_target, args, _newArg) {
-			EvalVillainHook(self.intr, this.evname, args, null);
-			return Reflect.construct(...arguments);
-		}
-	}
-
 	/*
 	 * NOTICE:
 	 * updates here should maybe be reflected in input validation
@@ -698,6 +680,19 @@ const rewriter = function(CONFIG) {
 	 * @param {string} evname	Name of sink to hook.
 	 **/
 	function applyEvalVillain(evname) {
+		class evProxy {
+			// Start of Eval Villain hook
+			apply(_target, thisArg, args) {
+				EvalVillainHook(funcConf, evname, args, thisArg);
+				return Reflect.apply(...arguments);
+			}
+
+			// Start of Eval Villain hook
+			construct(_target, args, _newArg) {
+				EvalVillainHook(funcConf, evname, args, null);
+				return Reflect.construct(...arguments);
+			}
+		}
 		function getFunc(n) {
 			const ret = {}
 			ret.where = window;
@@ -712,10 +707,10 @@ const rewriter = function(CONFIG) {
 			ret.leaf = groups[i];
 			return ret ? ret : null;
 		}
+		const funcConf = INTRBUNDLE;
 
 		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(evname);
-		const ep = new evProxy(INTRBUNDLE);
-		ep.evname = evname;
+		const ep = new evProxy();
 		if (ownprop) {
 			const prop = ownprop[1];
 			const f = getFunc(ownprop[2]);
