@@ -14,18 +14,19 @@
 /*
  * NOT interesting stuff
 */
-var t = "innerHTML no interest"
-var value = 'z980j4kd0';
-document.getElementById('here').innerHTML = value;
-testNormal(t, "set(Element.innerHTML)", value);
+let t = "innerHTML no interest"
+let value = 'z980j4kd0';
+const domObj = document.getElementById('here')
+domObj.innerHTML = value;
+testNormal(t, "set(Element.innerHTML)", value, domObj);
 
 t = "outerHTML no interest"
-document.getElementById('here').outerHTML = value;
-testNormal(t, "set(Element.outerHTML)", value);
+domObj.outerHTML = value;
+testNormal(t, "set(Element.outerHTML)", value, domObj);
 
 t = "document.write no interest"
 document.write(value);
-testNormal(t, "document.write", value);
+testNormal(t, "document.write", value, document);
 
 t = "Eval no interest"
 value = '{let dk309slkz9 = 939202}';

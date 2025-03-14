@@ -452,9 +452,9 @@ const rewriter = function(CONFIG) {
 		const func = argFormat.open ? real.logGroup : real.logGroupCollapsed;
 
 		if (thisArg && thisArg !== window) {
-			real.logGroupCollapsed("%carg[this]: %s: ", argFormat.default, thisArg.constructor.name);
+			func("%carg[this]: %s: ", argFormat.default, thisArg.constructor.name);
 			real.log(thisArg);
-			real.logGroupCollapsed();
+			real.logGroupEnd();
 		}
 
 		function printFuncAlso(arg) {

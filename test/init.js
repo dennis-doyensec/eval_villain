@@ -134,9 +134,13 @@ function chckNArg(test, msg) {
 function checkStackBanner(msg) {
 	chckNArg(["%cstack: ","color:None"], `${msg} stack banner`);
 }
-function checkArg(msg, value) {
+function checkArg(msg, value, thisArg) {
 	const type = typeof(value);
-	chckNArg(["%carg(%s):",colNone, type], `${msg} arg test`);
+	if (thisArg) {
+		chckNArg([ "%carg[this]: %s: ", "color:None", thisArg.constructor.name ], `${msg} THIS arg test`);
+		chckNArg([thisArg], `${msg} THIS arg value test`);
+	}
+	chckNArg(["%carg(%s):", colNone, type], `${msg} arg test`);
 	chckNArg(["%c%s", colGreen, value], `${msg} Interesting args`);
 }
 
@@ -192,9 +196,9 @@ function pushHistoryParam(key, value, clear=true) {
 	history.pushState({}, null, url);
 }
 
-function testNormal(msg, name, value) {
+function testNormal(msg, name, value, thisArg) {
 	chckNArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
-	checkArg(msg, value);
+	checkArg(msg, value, thisArg);
 	checkStackBanner(msg);
 	if (allCalls.length != 0) {
 		fail ("msg: extra args left over")
