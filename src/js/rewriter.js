@@ -711,12 +711,12 @@ const rewriter = function(CONFIG) {
 
 	/**
 	* Parse all arguments for function `name` and pretty print them in the console
-	* @param {SearchBundle}	intrBundle Used to check if a call is interesting
+	* @param {SearchBundle}	sinkConf Used to check if a call is interesting
 	* @param {string}	name Name of function that is being hooked
 	* @param {array}	args array of arguments
 	* @returns {boolean} Always returns `false`
 	**/
-	function EvalVillainHook(intrBundle, name, args, thisArg) {
+	function EvalVillainHook(sinkConf, name, args, thisArg) {
 		const fmts = CONFIG.formats;
 		let argObj = {};
 		try {
@@ -737,7 +737,7 @@ const rewriter = function(CONFIG) {
 
 		// does this call have an interesting result?
 		let format = null;
-		const printers = getInterest(argObj, intrBundle);
+		const printers = getInterest(argObj, sinkConf);
 
 		if (printers.length > 0) {
 			format = fmts.interesting;
@@ -789,13 +789,13 @@ const rewriter = function(CONFIG) {
 		class evProxy {
 			// Start of Eval Villain hook
 			apply(_target, thisArg, args) {
-				EvalVillainHook(funcConf, evname, args, thisArg);
+				EvalVillainHook(sinkConf, evname, args, thisArg);
 				return Reflect.apply(...arguments);
 			}
 
 			// Start of Eval Villain hook
 			construct(_target, args, _newArg) {
-				EvalVillainHook(funcConf, evname, args, null);
+				EvalVillainHook(sinkConf, evname, args, null);
 				return Reflect.construct(...arguments);
 			}
 		}
@@ -813,7 +813,7 @@ const rewriter = function(CONFIG) {
 			ret.leaf = groups[i];
 			return ret ? ret : null;
 		}
-		const funcConf = INTRBUNDLE;
+		const sinkConf = GLOB_SINK_CONF;
 
 		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(evname);
 		const ep = new evProxy();
@@ -874,7 +874,7 @@ const rewriter = function(CONFIG) {
 
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
 	delete CONFIG.blacklist;
-	const INTRBUNDLE = new SearchBundle(
+	const GLOB_SINK_CONF = new SearchBundle(
 		new NeedleBundle(CONFIG.needles),
 		ALLSOURCES
 	);
@@ -898,7 +898,7 @@ const rewriter = function(CONFIG) {
 	}
 
 	if (CONFIG.sinker) {
-		window[CONFIG.sinker] = (x,y) => EvalVillainHook(INTRBUNDLE, x, y);
+		window[CONFIG.sinker] = (x,y) => EvalVillainHook(GLOB_SINK_CONF, x, y);
 		delete CONFIG.sinker;
 	}
 
