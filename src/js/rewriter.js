@@ -47,6 +47,109 @@ const rewriter = function(CONFIG) {
 		}
 	}
 
+	const srcRefresher = {
+		"query": function() {
+			if (ALLSOURCES.query) {
+				const srch = window.location.search;
+				if (srch.length > 1) {
+					for (const [key, value] of getAllQueryParams(srch)) {
+						addToFifo({
+							param: key,
+							search: value
+						}, "query");
+					}
+				}
+			}
+		},
+		"fragment": function() {
+			if (ALLSOURCES.fragment) {
+				addToFifo({
+					search: location.hash.substring(1),
+				}, "fragment");
+			}
+		},
+		"winname": function() {
+			if (ALLSOURCES.winname) {
+				addToFifo({
+					display: "window.name",
+					search: window.name,
+				}, "winname");
+			}
+		},
+		"path": function() {
+			if (ALLSOURCES.path) {
+				const pth = location.pathname;
+				if (pth.length >= 1) {
+					addToFifo({search: pth}, "path");
+					pth.substring(1)
+						.split('/').forEach((elm, index) => {
+							addToFifo({
+								param: ""+index,
+								search: elm
+							}, "path");
+					});
+				}
+			}
+		},
+		"referer": function() {
+			if (ALLSOURCES.referrer && document.referrer) {
+				let url;
+				try {
+					url = new URL(document.referrer);
+				} catch (_err) {
+					return;
+				};
+
+				// TODO update this
+				if (url.search != location.search || url.search && url.pathname !== "/" && url.hostname !== location.hostname) {
+					addToFifo({search: document.referrer }, "referer");
+				}
+			}
+		},
+		"localStore": function() {
+			const l = real.localStorage.length;
+			for (let i=0; i<l; i++) {
+				const key = real.localStorage.key(i);
+				addToFifo({
+					display: "localStorage",
+					param: key,
+					search: real.localStorage.getItem(key),
+				}, "localStore");
+			}
+		},
+		"cookie": function() {
+			for (const i of document.cookie.split(/;\s*/)) {
+				const s = i.split("=");
+				if (s.length >= 2) {
+					addToFifo({
+						param: s[0],
+						search: s[1],
+					}, "cookie");
+				} else {
+					addToFifo({
+						search: s[0],
+					}, "cookie");
+				}
+			}
+		},
+	};
+
+	function initSource(nm) {
+		// returns source if it exists, otherwise populates it.
+		if (!ALLSOURCES[nm]) {
+			// create fifo for holding sources
+			ALLSOURCES[nm] = new SourceFifo(CONFIG.limits[nm]);
+
+			// init contents
+			const func = srcRefresher[nm];
+			if (typeof(func) != "function") {
+				throw `Source builder for ${nm} not found`;
+			}
+			func();
+		}
+		return ALLSOURCES[nm];
+	}
+
 	/** hold all interest fifos */
 	const ALLSOURCES = {}; // Used to hold all interest Fifo's
 
@@ -406,7 +509,9 @@ const rewriter = function(CONFIG) {
 		}
 
 		for (const i in args) {
-			if (!args.hasOwnProperty(i)) continue;
+			if (!args.hasOwnProperty(i)) {
+				continue;
+			}
 			const t = typeCheck(args[i]);
 			if (t === null) continue;
 			const ar = {
@@ -590,7 +695,8 @@ const rewriter = function(CONFIG) {
 		}
 
 		// update changing lists
-		addChangingSearch();
+		["query", "fragment", "winname", "path"]
+			.forEach(nm => srcRefresher[nm]());
 
 		const ret = [];
 
@@ -724,124 +830,27 @@ const rewriter = function(CONFIG) {
 		}
 	}
 
-	/**
-	 * Some sources can change without reloading the page, so EV checks for
-	 * them every time. This is should be relativly fast. If they are seen
-	 * before, they should not go through deep decoding loop.
-	 */
-	function addChangingSearch() {
-		// window.name
-		if (ALLSOURCES.winname) {
-			addToFifo({
-				display: "window.name",
-				search: window.name,
-			}, "winname");
-		}
-
-		if (ALLSOURCES.fragment) {
-			addToFifo({
-				search: location.hash.substring(1),
-			}, "fragment");
-		}
-
-		if (ALLSOURCES.query) {
-			const srch = window.location.search;
-			if (srch.length > 1) {
-				for (const [key, value] of getAllQueryParams(srch)) {
-					addToFifo({
-						param: key,
-						search: value
-					}, "query");
-				}
-			}
-		}
-
-		if (ALLSOURCES.path) {
-			const pth = location.pathname;
-			if (pth.length >= 1) {
-				addToFifo({search: pth}, "path");
-				pth.substring(1)
-					.split('/').forEach((elm, index) => {
-						addToFifo({
-							param: ""+index,
-							search: elm
-						}, "path");
-				});
-			}
-		}
-	}
-
-
-	/**
-	 * Parses initial values contained in sources and updates fifos with them.
-	 **/
-	function buildSearches() {
-		const {formats} = CONFIG;
-
-		function putInUse(nm) {
-			if (formats[nm] && formats[nm].use) {
-				ALLSOURCES[nm] = new SourceFifo(formats[nm].limit);
-				return true;
-			}
-			return false;
-		}
-
-		// referer
-		let nm = "referrer";
-		if (putInUse(nm) && document.referrer) {
-			const url = new URL(document.referrer);
-			// don't show if referer is just https://example.com/ and we are on an example.com domain
-			if (url.search != location.search || url.search && url.pathname !== "/" && url.hostname !== location.hostname) {
-				addToFifo({
-					search: document.referrer
-				}, nm);
-			}
-		}
-
-		// cookies
-		nm = "cookie";
-		if (putInUse(nm)) {
-			for (const i of document.cookie.split(/;\s*/)) {
-				const s = i.split("=");
-				if (s.length >= 2) {
-					addToFifo({
-						param: s[0],
-						search: s[1],
-					}, nm);
-				} else {
-					addToFifo({
-						search: s[0],
-					}, nm);
-				}
-			}
-		}
-
-		nm = "localStore"
-		if (putInUse(nm)){
-			const l = real.localStorage.length;
-			for (let i=0; i<l; i++) {
-				const key = real.localStorage.key(i);
-				addToFifo({
-					display: "localStorage",
-					param: key,
-					search: real.localStorage.getItem(key),
-				}, nm);
-			}
-		}
-
-
-		// TODO seems repeated
-		putInUse("winname")
-		putInUse("fragment");
-		putInUse("path");
-		putInUse("query");
-		addChangingSearch();
-	}
+	//////////////////////////////////////////
+	// Enough functions, start doings stuff //
+	//////////////////////////////////////////
 
 	// prove we loaded
 	if (CONFIG.checkId) {
 		document.currentScript.setAttribute(CONFIG.checkId, true);
 		delete CONFIG["checkId"];
+	}
+
+	// XXX remove when DB refactor complete
+	if (CONFIG.limits) {
+		console.log("XXX a kind reminder to remove this code");
+	} else {
+		CONFIG.limits = {};
+		for (const [key, value] of Object.entries(CONFIG.formats)) {
+			if (value.limit) {
+				CONFIG.limits[key] = value.limit;
+				delete CONFIG.formats[key].limit;
+			}
+		}
 	}
 
 	// grab real functions before hooking
@@ -861,7 +870,7 @@ const rewriter = function(CONFIG) {
 		decodeURI : decodeURI,
 		atob: atob,
 		replaceAll: "".replaceAll,
-	}
+	};
 
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
 	delete CONFIG.blacklist;
@@ -871,7 +880,13 @@ const rewriter = function(CONFIG) {
 	);
 	delete CONFIG.needles;
 
-	buildSearches();
+	// build up ALLSOURCES
+	["query", "fragment", "winname", "path", "referer", "localStore", "cookie"].forEach(nm => {
+		if (CONFIG.formats[nm]?.use) {
+			initSource(nm);
+		}
+	});
+
 
 	for (const nm of CONFIG["functions"]) {
 		applyEvalVillain(nm);
