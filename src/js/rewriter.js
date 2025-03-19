@@ -132,6 +132,26 @@ const rewriter = function(CONFIG) {
 				}
 			}
 		},
+		"userSource": function() {
+			const srcer = CONFIG.sourcer;
+			if (!srcer) {
+				throw `Can't use user source without a name!!!`;
+			}
+			window[srcer] = (src_name, src_val, debug=false) => {
+				// ex: evSourcer("Response from fetch", resp.json(), true)
+				// debug=true results in a console.debug for each source injested
+				if (debug) {
+					const o = typeof(src_val) === 'string'? src_val: real.JSON.stringify(src_val);
+					real.debug(`[EV] ${srcer}[${src_name}] from ${document.location.origin}  added:\n ${o}`);
+				}
+				addToFifo({
+					display: `${srcer}[${src_name}]`,
+					search: src_val,
+					}, "userSource");
+				return false;
+			}
+			delete CONFIG.sourcer;
+		}
 	};
 
 	function initSource(nm) {
@@ -342,7 +362,10 @@ const rewriter = function(CONFIG) {
 	};
 
 	let rotateWarnAt = 8;
-	/** Recursivly decode source object and add it to selected fifo */
+	/**
+	 * Recursivly decode source object and add it to selected fifo.
+	 * NOTE: needs to be available to evSourcer sink
+	 */
 	function addToFifo(sObj, fifoName) { // TODO: add blacklist arg
 		const fifo = ALLSOURCES[fifoName];
 		if (!fifo) {
@@ -815,14 +838,11 @@ const rewriter = function(CONFIG) {
 		return false;
 	}
 
-	/*
-	 * NOTICE:
-	 * updates here should maybe be reflected in input validation
-	 * file: /pages/config/config.js
-	 * function: validateFunctionsPattern
-	*/
 	/**
-	 * Accepts sink name, such as `document.write` or `value(URLSearchParams.get)` and replaces the sink with a proxy (`evProxy`).
+	 * Accepts sink name, such as `document.write` or
+	 * `value(URLSearchParams.get)` and replaces the sink with a proxy
+	 * (`evProxy`).
+	 *
 	 * @param {string} evname	Name of sink to hook.
 	 **/
 	function applyEvalVillain(evname) {
@@ -913,8 +933,11 @@ const rewriter = function(CONFIG) {
 	};
 
 	// build up global sources
-	const SOURCES = ["query", "fragment", "winname", "path", "referer", "localStore", "cookie"]
-		.filter(n => CONFIG.formats[n]?.use);
+	const SOURCES = [
+		"query", "fragment", "winname", "path", "referer", "localStore",
+		"cookie", "userSource"
+	].filter(n => CONFIG.formats[n]?.use);
+
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
 	const NEEDLES = CONFIG.formats.needle?.use? new NeedleBundle(CONFIG.needles): null;
 	delete CONFIG.blacklist;
@@ -935,28 +958,6 @@ const rewriter = function(CONFIG) {
 	if (CONFIG.sinker) {
 		window[CONFIG.sinker] = (x,y) => EvalVillainHook(GLOB_SINK_CONF, x, y);
 		delete CONFIG.sinker;
-	}
-
-	if (CONFIG.sourcer) {
-		const fmt = CONFIG.formats.userSource;
-		if (fmt.use) {
-			const srcer = CONFIG.sourcer;
-			ALLSOURCES.userSource = new SourceFifo(fmt.limit);
-			window[srcer] = (src_name, src_val, debug=false) => {
-				// ex: evSourcer("Response from fetch", resp.json(), true)
-				// debug=true results in a console.debug for each source injested
-				if (debug) {
-					const o = typeof(src_val) === 'string'? src_val: real.JSON.stringify(src_val);
-					real.debug(`[EV] ${srcer}[${src_name}] from ${document.location.origin}  added:\n ${o}`);
-				}
-				addToFifo({
-					display: `${srcer}[${src_name}]`,
-					search: src_val,
-					}, "userSource");
-				return false;
-			}
-			delete CONFIG.sourcer;
-		}
 	}
 
 	real.log("%c[EV]%c Functions hooked for %c%s%c",
