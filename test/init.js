@@ -5,13 +5,13 @@ const storekeyfind = "0d9jlfk2j309jflaksjd0fasoekjr2398rjfalkjsdf";
 {
 	let jsdata = btoa(JSON.stringify(
 		  {
-			 "firstProperty" : "firstPropans", 
-			 "secondArray" : [ "firstinarray", "secondinarray" ], 
-			 "bool" : true, 
+			 "firstProperty" : "firstPropans",
+			 "secondArray" : [ "firstinarray", "secondinarray" ],
+			 "bool" : true,
 			 "small" : "a"
 		  }
 	));
-	
+
 	let gotourl = `?one=1&json=${jsdata}&param_zxcv=zxcv&encoded=%27%20%2b%20%3c&bool=true`
 	let frag = "fragment_value";
 	let url = new URL(location.href);
@@ -190,7 +190,7 @@ function testInterset(msg, name, reason, needle, line, decoded) {
 function pushHistoryParam(key, value, clear=true) {
 	const url = new URL(location.href);
 	if (clear) {
-		Array.from(url.searchParams.keys() ).forEach(x => url.searchParams.delete(x)); 
+		Array.from(url.searchParams.keys() ).forEach(x => url.searchParams.delete(x));
 	}
 	url.searchParams.set(key, value);
 	history.pushState({}, null, url);
@@ -211,9 +211,11 @@ function testNormal(msg, name, value, thisArg) {
 
 
 const colNone = "color:None";
-const colGreen = "color:#088"
-const colRed = "color:red"
+const colGreen = "color:#088";
+const colBlue = "color:#147599";
+const colRed = "color:red";
 var config =  {
+	"sourcer": "evSourcer",
 	"formats" : {
 		"title" : {
 			"pretty" : "Normal Results",
@@ -235,6 +237,15 @@ var config =  {
 			"open" : true,
 			"default" : colNone,
 			"highlight" : colGreen
+		},
+		"userSource": {
+			"pretty": "User Sources",
+			"use": true,
+			"limit": 32,
+			"default": colNone,
+			"highlight": colBlue,
+			"open": false,
+			"pretty": "User Sources",
 		},
 		"needle" : {
 			"pretty" : "Needles Search",

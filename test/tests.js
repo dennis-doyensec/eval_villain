@@ -113,10 +113,21 @@ testInterset(t, "eval", reason, needle, line, decoded);
 
 // push state here
 t = "Push state to change URL params, test to see if new URL params found"
-const pname = "newpushedparameter";
+let pname = "newpushedparameter";
 needle = "url_change_without_reload_test_needle";
 reason = `query[${pname}]`;
 pushHistoryParam(pname, needle)
 line = ['// ', needle, ''];
 eval(line.join(""));
+testInterset(t, "eval", reason, needle, line);
+
+
+// evSourcer
+pname = "test";
+needle = 'aisjd;ljaovkaoiejljgbvmbg;lkjsdfoigqa;elrtj';
+evSourcer(pname, needle, true)
+line = ['// ', needle, ''];
+eval(line.join(""));
+t = "evSourcer test"
+reason = `evSourcer[${pname}]`;
 testInterset(t, "eval", reason, needle, line);
