@@ -160,3 +160,16 @@ line = ['// ', needle, ''];
 eval(line.join(""));
 reason = `evSourcer[${pname}]`;
 testInterset(t, "eval", reason, needle, line, true);
+
+
+// addEventListener("message", ...) custom
+t = "postMessage init"
+needle = 'this may as well be a readable string I guess...';
+evSourcer(pname, btoa(JSON.stringify({a: {b: {c: needle}}})), true)
+line = ['// ', needle, ''];
+addEventListener("message", msg => {
+	console.debug('got postMessage');
+	console.dir(msg);
+});
+reason = `evSourcer[${pname}]`;
+testInterset(t, "window.addEventListener", reason, needle, line, true);

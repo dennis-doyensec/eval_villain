@@ -238,15 +238,6 @@ var config =  {
 			"default" : colNone,
 			"highlight" : colGreen
 		},
-		"userSource": {
-			"pretty": "User Sources",
-			"use": true,
-			"limit": 32,
-			"default": colNone,
-			"highlight": colBlue,
-			"open": false,
-			"pretty": "User Sources",
-		},
 		"needle" : {
 			"pretty" : "Needles Search",
 			"use" : true,
@@ -310,13 +301,13 @@ var config =  {
 			"default" : colNone,
 			"highlight" : colGreen
 		},
-		"userSource" : {
-			"pretty" : "User Source",
-			"use" : true,
-			"limit" : 32,
-			"open" : true,
-			"default" : colNone,
-			"highlight" : colGreen
+		"userSource": {
+			"pretty": "User Sources",
+			"use": true,
+			"limit": 32,
+			"default": colNone,
+			"highlight": colGreen, // TODO allow colBlue,
+			"open": false,
 		},
 		"stack" : {
 			"pretty" : "Stack Display",
@@ -344,6 +335,17 @@ var config =  {
 		"set(Element.outerHTML)",
 		"document.write",
 		"document.writeln",
+		{
+			"name": "window.addEventListener",
+			"conf": {
+				"args": {
+					0: {
+						"needles": ["/^message$/"],
+						"types": ["string"],
+					}
+				}
+			}
+		}
 	],
 	"types" : ["string"],
 };

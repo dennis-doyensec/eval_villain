@@ -303,6 +303,10 @@ const rewriter = function(CONFIG) {
 				srcs.forEach(src => this.fifoBank[src] = initSource(src));
 			}
 			this.types = argConf.types;
+			if (!this.types || !Array.isArray(this.types)) {
+				throw `[EV] missing types in sink config`;
+			}
+
 		}
 
 		*genSplits(argObj) {
@@ -310,21 +314,28 @@ const rewriter = function(CONFIG) {
 			if (!this.types.includes(type)) {
 				return;
 			}
-
-			for (const match of this.needles?.genStrMatches(str)) {
-				yield {
-					name: "needle", decode:"",
-					search: match,
-					split: strSpliter(str, match)
-				};
+			if (str == 'message') {
+				debugger;
 			}
 
-			for (const match of this.needles.genRegMatches(str)) {
-				yield {
-					name: "needle", decode:"",
-					search: match,
-					split: regexSpliter(str, match)
-				};
+			if (this.needles?.genStrMatches) {
+				for (const match of this.needles.genStrMatches(str)) {
+					yield {
+						name: "needle", decode:"",
+						search: match,
+						split: strSpliter(str, match)
+					};
+				}
+			}
+
+			if (this.needles?.genRegMatches) {
+				for (const match of this.needles.genRegMatches(str)) {
+					yield {
+						name: "needle", decode:"",
+						search: match,
+						split: regexSpliter(str, match)
+					};
+				}
 			}
 
 			for (const [key, fifo] of Object.entries(this.fifoBank)) {
@@ -345,7 +356,7 @@ const rewriter = function(CONFIG) {
 	class SinkConf {
 		args = {};
 		constructor(conf) {
-			for (const [argName, argConf] of Object.entries(conf)) {
+			for (const [argName, argConf] of Object.entries(conf.args)) {
 				this.args[argName] = new SinkArgConf(argConf);
 			}
 		}
@@ -354,8 +365,10 @@ const rewriter = function(CONFIG) {
 			// TODO implmeent deeper per argument rules
 			for (const [key, value] of Object.entries(argObj.args)) {
 				const tester = this.args[key] ?? this.args["all"];
-				for (const ret of tester?.genSplits(value)) {
-					yield [ret, value];
+				if (tester) {
+					for (const ret of tester?.genSplits(value)) {
+						yield [ret, value];
+					}
 				}
 			}
 		}
@@ -383,12 +396,17 @@ const rewriter = function(CONFIG) {
 			}
 		}
 
+		function prettyJson(s, tabs) {
+			return real.JSON.stringify(s, null, 2)
+				.replaceAll('\n', '\n' + '\t'.repeat(tabs));
+		}
+
 		function *deepDecode(s) {
 			// TODO: Sets...
 			if (typeof(s) === 'string') {
 				yield *decodeAll(s);
 			} else if (typeof(s) === "object") {
-				const fwd = `\t{\n\t\tlet _ = ${JSON.stringify(s)};\n\t\t_`;
+				const fwd = `\t{\n\t\tlet _ = ${prettyJson(s, 2)};\n\t\t_`;
 				yield *decodeAny(s, `\t\tx = _\n\t}\n`, fwd);
 			}
 		}
@@ -419,7 +437,7 @@ const rewriter = function(CONFIG) {
 
 		function* decodeObject(o, decoded, fwd) {
 			for (const prop in o) {
-				yield *decodeAny(o[prop], decoded, fwd+`[${JSON.stringify(prop)}]`);
+				yield *decodeAny(o[prop], decoded, fwd+`[${real.JSON.stringify(prop)}]`);
 			}
 		}
 
@@ -439,7 +457,7 @@ const rewriter = function(CONFIG) {
 			try {
 				const dec = real.JSON.parse(s);
 				if (dec) {
-					const fwd = `\t{\n\t\tlet _ = ${s};\n\t\t_`;
+					const fwd = `\t{\n\t\tlet _ = ${prettyJson(dec, 2)};\n\t\t_`;
 					yield *decodeAny(dec, `\t\tx = JSON.stringify(_);\n\t}\n${decoded}`, fwd);
 					return;
 				}
@@ -839,23 +857,19 @@ const rewriter = function(CONFIG) {
 	}
 
 	/**
-	 * Accepts sink name, such as `document.write` or
-	 * `value(URLSearchParams.get)` and replaces the sink with a proxy
-	 * (`evProxy`).
-	 *
-	 * @param {string} evname	Name of sink to hook.
-	 **/
-	function applyEvalVillain(evname) {
+	* Applies the Eval Villain hook to a sink, using the sink configuration
+	*/
+	function applyEvalVillain(sinkName, sinkConf) {
 		class evProxy {
 			// Start of Eval Villain hook
 			apply(_target, thisArg, args) {
-				EvalVillainHook(sinkConf, evname, args, thisArg);
+				EvalVillainHook(sinkConf, sinkName, args, thisArg);
 				return Reflect.apply(...arguments);
 			}
 
 			// Start of Eval Villain hook
 			construct(_target, args, _newArg) {
-				EvalVillainHook(sinkConf, evname, args, null);
+				EvalVillainHook(sinkConf, sinkName, args, null);
 				return Reflect.construct(...arguments);
 			}
 		}
@@ -873,19 +887,18 @@ const rewriter = function(CONFIG) {
 			ret.leaf = groups[i];
 			return ret ? ret : null;
 		}
-		const sinkConf = GLOB_SINK_CONF;
 
-		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(evname);
+		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(sinkName);
 		const ep = new evProxy();
 		if (ownprop) {
 			const prop = ownprop[1];
 			const f = getFunc(ownprop[2]);
 			const orig = Object.getOwnPropertyDescriptor(f.where.prototype, f.leaf)[prop];
 			Object.defineProperty(f.where.prototype, f.leaf, {[prop] : new Proxy(orig, ep)});
-		} else if (!/^[a-zA-Z.]+$/.test(evname)) {
-			real.log("[EV] name: %s invalid, not hooking", evname);
+		} else if (!/^[a-zA-Z.]+$/.test(sinkName)) {
+			real.log("[EV] name: %s invalid, not hooking", sinkName);
 		} else {
-			const f = getFunc(evname);
+			const f = getFunc(sinkName);
 			f.where[f.leaf] = new Proxy(f.where[f.leaf], ep);
 		}
 	}
@@ -941,14 +954,26 @@ const rewriter = function(CONFIG) {
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
 	const NEEDLES = CONFIG.formats.needle?.use? new NeedleBundle(CONFIG.needles): null;
 	delete CONFIG.blacklist;
-	const GLOB_SINK_CONF = new SinkConf({"all": {
-		"needles": "global",
-		"sources": "global",
-		"types": CONFIG.types,
-	}});
+	const GLOB_SINK_CONF = new SinkConf({
+		"args": {
+			"all": {
+				"needles": "global",
+				"sources": "global",
+				"types": CONFIG.types,
+			}
+		}
+	});
 	delete CONFIG.needles;
 
-	CONFIG.functions.forEach(applyEvalVillain);
+	CONFIG.functions
+		.forEach(x => {
+			if (typeof(x) === 'string') {
+				applyEvalVillain(x, GLOB_SINK_CONF);
+			} else {
+				applyEvalVillain(x.name, new SinkConf(x.conf));
+			}
+		});
+	delete CONFIG.functions;
 
 	// turns console.log into console.info
 	if (CONFIG.formats.logReroute.use) {
