@@ -121,7 +121,6 @@ line = ['// ', needle, ''];
 eval(line.join(""));
 testInterset(t, "eval", reason, needle, line);
 
-
 // evSourcer
 pname = "test";
 needle = 'aisjd;ljaovkaoiejljgbvmbg;lkjsdfoigqa;elrtj';
@@ -131,3 +130,33 @@ eval(line.join(""));
 t = "evSourcer test"
 reason = `evSourcer[${pname}]`;
 testInterset(t, "eval", reason, needle, line);
+
+// evSourcer encoded
+t = "evSourcer base64"
+pname = "test";
+needle = 'ais1029834c,jlosdiforjoisalkdfkvcmlkdrtj';
+evSourcer(pname, btoa(needle), true)
+line = ['// ', needle, ''];
+eval(line.join(""));
+reason = `evSourcer[${pname}]`;
+testInterset(t, "eval", reason, needle, line, true);
+
+// evSourcer obj
+t = "evSourcer obj"
+pname = "objtest";
+needle = 'xxjopidfkjvcoisdjlkvjsoiddfkjgbkjgjgkjkjdfjkafkjdfs';
+evSourcer(pname, {a: {b: {c: needle}}}, true)
+line = ['// ', needle, ''];
+eval(line.join(""));
+reason = `evSourcer[${pname}]`;
+testInterset(t, "eval", reason, needle, line, true);
+
+// evSourcer base64 json
+t = "evSourcer base64 json"
+pname = "base64 JSON";
+needle = 'this may as well be a readable string I guess...';
+evSourcer(pname, btoa(JSON.stringify({a: {b: {c: needle}}})), true)
+line = ['// ', needle, ''];
+eval(line.join(""));
+reason = `evSourcer[${pname}]`;
+testInterset(t, "eval", reason, needle, line, true);
