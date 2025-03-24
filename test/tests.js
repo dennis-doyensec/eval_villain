@@ -8,168 +8,385 @@
 		fail("Only Banner");
 	}
 	/* printNextArgs(); */
-	chckNArg(["%c[EV]%c Functions hooked for %c%s%c", colGreen, colRed, colGreen, location.origin, colRed], "banner check");
+	checkArg(["%c[EV]%c Functions hooked for %c%s%c", colGreen, colRed, colGreen, location.origin, colRed], "banner check");
 }
 
-/*
- * NOT interesting stuff
-*/
-let t = "innerHTML no interest"
-let value = 'z980j4kd0';
-const domObj = document.getElementById('here')
-domObj.innerHTML = value;
-testNormal(t, "set(Element.innerHTML)", value, domObj);
+// test scope
+{
+	/*
+	 * NOT interesting stuff
+	*/
+	let t = "innerHTML no interest"
+	let value = 'z980j4kd0';
+	const domObj = document.getElementById('here')
+	domObj.innerHTML = value;
+	testNormal(t, "set(Element.innerHTML)", {
+		"this": {
+			value: domObj,
+			type: "object",
+		},
+		0: {
+			value: value,
+		}
+	});
 
-t = "outerHTML no interest"
-domObj.outerHTML = value;
-testNormal(t, "set(Element.outerHTML)", value, domObj);
+	t = "outerHTML no interest"
+	domObj.outerHTML = value;
+	testNormal(t, "set(Element.outerHTML)", {
+		"this": {
+			value: domObj,
+			type: "object",
+		},
+		0: {
+			value: value,
+		}
+	});
 
-t = "document.write no interest"
-document.write(value);
-testNormal(t, "document.write", value, document);
+	t = "document.write no interest"
+	document.write(value);
+	testNormal(t, "document.write", {
+		"this": {
+			value: document,
+			type: "object",
+		},
+		0: {
+			value: value,
+		}
+	});
 
-t = "Eval no interest"
-value = '{let dk309slkz9 = 939202}';
-eval(value);
-testNormal(t, "eval", value);
+	t = "Eval no interest"
+	value = '{let dk309slkz9 = 939202}';
+	eval(value);
+	testNormal(t, "eval", {
+		0: {
+			value: value,
+		}
+	});
 
-t = "Eval blacklist bool"
-value = '{let dk309slkz9 = true}';
-eval(value);
-testNormal(t, "eval", value);
+	t = "Eval blacklist bool"
+	value = '{let dk309slkz9 = true}';
+	eval(value);
+	testNormal(t, "eval", {
+		0: {
+			value: value,
+		}
+	});
 
-/*
- * Interesting
-*/
-let reason = "needle";
-let needle = 'asdf';
-let decoded = "";
-t = "Eval needle"
-let line = ['{let ', needle, ' = true}'];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line);
+	/*
+	 * Interesting
+	*/
+	let needle = 'asdf';
+	t = "Eval needle";
+	let line = ['{let ', needle, ' = true}'];
+	eval(line.join(""));
+	let argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	let intArr = [
+		{
+			decoded: false,
+			reason: "needle",
+			needle: needle,
+			line: line,
+		},
 
-t = "localstoreage test"
-reason = `localStorage[${storekey}]`
-needle = storekeyfind;
-line = ["() => {\n\treturn '", needle, "';// ", needle, " ssssssss\n}"];
-decoded = 'decodeURIComponent("%27%20%2b%20%3c")';
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line, decoded);
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-t = "Blacklist true, needle eval"
-reason = "needle";
-needle = 'asdf';
-decoded = "";
-line = ['', needle, ' = 1;{let ', needle, ' = true}'];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line);
+	t = "localstoreage test";
+	needle = storekeyfind;
+	line = ["() => {\n\treturn '", needle, "';// ", needle, " ssssssss\n}"];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason: `localStorage[${storekey}]`,
+			needle: needle,
+			line: line,
+		},
 
-t = "Query unencoded"
-reason = "query[param_zxcv]";
-needle = 'zxcv';
-line = ['// ', needle, ''];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line, false);
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-t = "Query encoded"
-reason = "query[encoded]";
-needle = '\' + <';
-line = ['// ', needle, ''];
-decoded = 'decodeURIComponent("%27%20%2b%20%3c")';
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line, decoded);
+	t = "Blacklist true, needle eval"
+	needle = 'asdf';
+	line = ['', needle, ' = 1;{let ', needle, ' = true}'];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: "needle",
+			needle: needle,
+			line: line,
+		},
 
-t = "Fragment"
-reason = "fragment";
-needle = 'fragment_value';
-line = ['// ', needle, ''];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line);
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-t = "2nd Fragment"
-needle = "newfrag";
-window.location.hash = needle;
-reason = "fragment";
-line = ['// ', needle, ''];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line);
+	t = "Query unencoded"
+	needle = 'zxcv';
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: "query[param_zxcv]",
+			needle: needle,
+			line: line,
+		},
 
-t = "new fragment blacklist"
-needle = "true";
-window.location.hash = needle;
-reason = "fragment";
-line = ['// ', needle, ''];
-eval(line.join(""));
-testNormal(t, "eval", line.join(""));
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-t = "decoding atob,json,array  atob encoded"
-reason = "query[json]";
-needle = 'secondinarray';
-decoded = 'JSON.parse(atob("eyJmaXJzdFByb3BlcnR5IjoiZmlyc3RQcm9wYW5zIiwic2Vjb25kQXJyYXkiOlsiZmlyc3RpbmFycmF5Iiwic2Vjb25kaW5hcnJheSJdLCJib29sIjp0cnVlLCJzbWFsbCI6ImEifQ=="))["secondArray"]["1"]';
-line = ['// ', needle, ''];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line, decoded);
+	t = "Query encoded"
+	needle = '\' + <';
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason: "query[encoded]",
+			needle: needle,
+			line: line,
+		},
 
-// push state here
-t = "Push state to change URL params, test to see if new URL params found"
-let pname = "newpushedparameter";
-needle = "url_change_without_reload_test_needle";
-reason = `query[${pname}]`;
-pushHistoryParam(pname, needle)
-line = ['// ', needle, ''];
-eval(line.join(""));
-testInterset(t, "eval", reason, needle, line);
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-// evSourcer
-pname = "test";
-needle = 'aisjd;ljaovkaoiejljgbvmbg;lkjsdfoigqa;elrtj';
-evSourcer(pname, needle, true)
-line = ['// ', needle, ''];
-eval(line.join(""));
-t = "evSourcer test"
-reason = `evSourcer[${pname}]`;
-testInterset(t, "eval", reason, needle, line);
+	t = "Fragment"
+	needle = 'fragment_value';
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: "fragment",
+			needle: needle,
+			line: line,
+		},
 
-// evSourcer encoded
-t = "evSourcer base64"
-pname = "test";
-needle = 'ais1029834c,jlosdiforjoisalkdfkvcmlkdrtj';
-evSourcer(pname, btoa(needle), true)
-line = ['// ', needle, ''];
-eval(line.join(""));
-reason = `evSourcer[${pname}]`;
-testInterset(t, "eval", reason, needle, line, true);
+	];
+	testInterset(t, "eval", argObj, intArr);
 
-// evSourcer obj
-t = "evSourcer obj"
-pname = "objtest";
-needle = 'xxjopidfkjvcoisdjlkvjsoiddfkjgbkjgjgkjkjdfjkafkjdfs';
-evSourcer(pname, {a: {b: {c: needle}}}, true)
-line = ['// ', needle, ''];
-eval(line.join(""));
-reason = `evSourcer[${pname}]`;
-testInterset(t, "eval", reason, needle, line, true);
+	t = "2nd Fragment"
+	needle = "newfrag";
+	window.location.hash = needle;
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: "fragment",
+			needle: needle,
+			line: line,
+		},
 
-// evSourcer base64 json
-t = "evSourcer base64 json"
-pname = "base64 JSON";
-needle = 'this may as well be a readable string I guess...';
-evSourcer(pname, btoa(JSON.stringify({a: {b: {c: needle}}})), true)
-line = ['// ', needle, ''];
-eval(line.join(""));
-reason = `evSourcer[${pname}]`;
-testInterset(t, "eval", reason, needle, line, true);
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	t = "new fragment blacklist"
+	needle = "true";
+	window.location.hash = needle;
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	testNormal(t, "eval", {
+		0: {
+			value: line.join(""),
+		}
+	});
+
+	t = "decoding atob,json,array  atob encoded"
+	needle = 'secondinarray';
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason: "query[json]",
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	// push state here
+	t = "Push state to change URL params, test to see if new URL params found"
+	let pname = "newpushedparameter";
+	needle = "url_change_without_reload_test_needle";
+	pushHistoryParam(pname, needle)
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: `query[${pname}]`,
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	// evSourcer
+	pname = "test";
+	needle = 'aisjd;ljaovkaoiejljgbvmbg;lkjsdfoigqa;elrtj';
+	evSourcer(pname, needle, true)
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	t = "evSourcer test"
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: false,
+			reason: `evSourcer[${pname}]`,
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	// evSourcer encoded
+	t = "evSourcer base64"
+	pname = "test";
+	needle = 'ais1029834c,jlosdiforjoisalkdfkvcmlkdrtj';
+	evSourcer(pname, btoa(needle), true)
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason: `evSourcer[${pname}]`,
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	// evSourcer obj
+	t = "evSourcer obj"
+	pname = "objtest";
+	needle = 'xxjopidfkjvcoisdjlkvjsoiddfkjgbkjgjgkjkjdfjkafkjdfs';
+	evSourcer(pname, {a: {b: {c: needle}}}, true)
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason:  `evSourcer[${pname}]`,
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
+
+	// evSourcer base64 json
+	t = "evSourcer base64 json"
+	pname = "base64 JSON";
+	needle = 'this may as well be a readable string I guess...';
+	evSourcer(pname, btoa(JSON.stringify({a: {b: {c: needle}}})), true)
+	line = ['// ', needle, ''];
+	eval(line.join(""));
+	argObj = {
+		0: {
+			value: line.join(""),
+		},
+	};
+	intArr = [
+		{
+			decoded: true,
+			reason:  `evSourcer[${pname}]`,
+			needle: needle,
+			line: line,
+		},
+
+	];
+	testInterset(t, "eval", argObj, intArr);
 
 
-// addEventListener("message", ...) custom
-t = "postMessage init"
-needle = 'this may as well be a readable string I guess...';
-evSourcer(pname, btoa(JSON.stringify({a: {b: {c: needle}}})), true)
-line = ['// ', needle, ''];
-addEventListener("message", msg => {
-	console.debug('got postMessage');
-	console.dir(msg);
-});
-reason = `evSourcer[${pname}]`;
-testInterset(t, "window.addEventListener", reason, needle, line, true);
+	// addEventListener("message", ...) custom
+	t = "postMessage init"
+	line = ["", "message", ""];
+	const func = msg => {
+		console.debug('got postMessage');
+		console.dir(msg);
+	}
+	addEventListener("message", func);
+	argObj = {
+		0: {
+			line: ["message"],
+		},
+		1: {
+			func: func,
+		}
+	}
+	intArr = [
+		{
+			decoded: false,
+			reason: "needle",
+			needle: /^message$/,
+			line: line,
+			arg: 0,
+		},
+	];
+	testInterset(t, "window.addEventListener", argObj, intArr);
+}

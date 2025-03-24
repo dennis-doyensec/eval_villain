@@ -87,8 +87,13 @@ function argsIs(args, test) {
 	}
 	let c = 0;
 	const off = []
-	for (const i of args) {
-		if (i !== test[c]) {
+	for (let i of args) {
+		let t = test[c];
+		if ([t, i].filter(x => x instanceof RegExp).length == 2) {
+			t = t.toString();
+			i = i.toString();
+		}
+		if (i !== t) {
 			off.push(`arg[${c}] '${i}' !== '${test[c]}'`)
 		}
 		c++;
@@ -102,7 +107,7 @@ function argsIs(args, test) {
 /**
  * Pops msg from `allCalls` and checks if it matches `test`
 */
-function chckNArg(test, msg) {
+function checkArg(test, msg) {
 	const why = argsIs(allCalls.shift(), test);
 	if (why === true) {
 		cgc(`[%c**%c] ${msg}`, "color:green", "color:None");
@@ -111,52 +116,96 @@ function chckNArg(test, msg) {
 	} else {
 		fail(msg);
 		const erinfo = "Error Info:";
-		cg(erinfo)
-		for (const i of why.off) {
-			cl(i);
-		}
+		cg(erinfo);
+			for (const i of why.off) {
+				cl(i);
+			}
 
-		const got = "got: ";
-		cg(got);
-		cl(argsToPrintable(why.got));
-		cl(...why.got);
-		cge();
+			const got = "got: ";
+			cg(got);
+				cl(argsToPrintable(why.got));
+				cl(...why.got);
+			cge();
 
-		const exp = "expected: "
-		cg(exp);
-		cl("expected: ", JSON.stringify(why.expect, null, 2));
-		cl(...why.expect);
-		cge(exp);
+			const exp = "expected: "
+			cg(exp);
+				cl("expected: ", JSON.stringify(why.expect, null, 2));
+				cl(...why.expect);
+			cge(exp);
 		cge(erinfo)
 	};
 }
 
 function checkStackBanner(msg) {
-	chckNArg(["%cstack: ","color:None"], `${msg} stack banner`);
+	checkArg(["%cstack: ","color:None"], `${msg} stack banner`);
 }
-function checkArg(msg, value, thisArg) {
-	const type = typeof(value);
-	if (thisArg) {
-		chckNArg([ "%carg[this]: %s: ", "color:None", thisArg.constructor.name ], `${msg} THIS arg test`);
-		chckNArg([thisArg], `${msg} THIS arg value test`);
+
+function checkAllArgs(msg, argObj) {
+	// handle this first
+	if (Object.keys(argObj).includes("this")) {
+		const {value} = argObj["this"];
+		checkArg([ "%carg[this]: %s: ", "color:None", value.constructor.name ], `${msg} THIS arg test`);
+		checkArg([value], `${msg} THIS arg value test`);
 	}
-	chckNArg(["%carg(%s):", colNone, type], `${msg} arg test`);
-	chckNArg(["%c%s", colGreen, value], `${msg} Interesting args`);
+
+	// remove this
+	const keys = Object.keys(argObj).filter(x => x !== "this");
+
+	if (keys.length == 1) {
+		const {line, func, type, value} = argObj[keys[0]];
+		if (func) {
+			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, "function"], `${msg} arg[${p}/${t}] title`);
+			checkArg(["%c%s", colGreen, func.toString()], `${msg} arg[${p}/${t}] value`);
+			checkArg([func], `${msg} arg[${p}/${t}] func ref`);
+		} else {
+			checkArg(["%carg(%s):", colNone, type ?? "string"], `${msg} arg test`);
+			checkArg(["%c%s", colGreen, value ?? line.join()], `${msg} Interesting args`);
+		}
+		return;
+	}
+
+	const t = keys.length;
+	for (const key of keys) {
+		const {line, func, type} = argObj[key];
+		const p = parseInt(key, 10) + 1;
+		if (func) {
+			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, "function"], `${msg} arg[${p}/${t}] title`);
+			checkArg(["%c%s", colGreen, func.toString()], `${msg} arg[${p}/${t}] value`);
+			checkArg([func], `${msg} arg[${p}/${t}] func ref`);
+		} else {
+			const value = line.join(" ");
+			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, type ?? "string"], `${msg} arg[${p}/${t}] test`);
+			checkArg(["%c%s", colGreen, value], `${msg} Interesting args`);
+		}
+	}
 }
 
-function testInterset(msg, name, reason, needle, line, decoded) {
-	const value = line.join("");
-	chckNArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
-	checkArg(msg, value);
+function checkAnInterest(msg, interest) {
+	const {
+		decoded, reason, needle, arg, c, line
+	} = interest;
+	const col = c ?? colGreen;
 
-	const ban = decoded
-		? ['%c%s%c%s%c%s%c%s', colNone, `${reason}: `,
-			colGreen, needle, colNone, " found", colGreen, " [Decoded]"]
-		: ["%c%s%c%s%c%s", colNone,`${reason}: `, colGreen, needle, colNone, " found"];
 
-	chckNArg(ban, `${msg} Interesting highlight`);
+	const ban = [colNone,`${reason}: `, col, needle, colNone];
+	if (typeof(arg) === 'number') {
+		ban.push(
+			" found (arg:",
+			"color:#088",
+			arg,
+			"color:None",
+			")"
+		);
+	} else {
+		ban.push(" found");
+	}
 	if (decoded) {
-		chckNArg(["Encoder function:"], `${msg} Encoder Highlight`);
+		ban.push(col, " [Decoded]");
+	}
+
+	checkArg(["%c%s".repeat(ban.length / 2)].concat(ban), `${msg} Interesting highlight`);
+	if (decoded) {
+		checkArg(["Encoder function:"], `${msg} Encoder Highlight`);
 		const encoder = allCalls.shift();
 		if (encoder.length != 1) {
 			fail("Encoder not a single arg");
@@ -176,7 +225,24 @@ function testInterset(msg, name, reason, needle, line, decoded) {
 		test.push(f);
 		ci = (ci+1)%2;
 	}
-	chckNArg(test, `${msg} Interesting highlight`);
+	checkArg(test, `${msg} Interesting highlight`);
+
+
+}
+
+function testInterset(msg, name, argObj, interArray) {
+	const argLen = Object.keys(argObj).length;
+	if (argLen <= 1) {
+		checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
+	} else {
+		checkArg(["%c[EV] %c%s[%d]%c %s", colRed, colGreen, name, argLen, colRed, location.href], `${msg} Interesting Banner`);
+	}
+
+	checkAllArgs(msg, argObj);
+	for (const interest of interArray) {
+		checkAnInterest(msg, interest);
+	}
+
 	checkStackBanner(msg);
 	if (allCalls.length != 0) {
 		fail ("msg: extra args left over")
@@ -196,9 +262,10 @@ function pushHistoryParam(key, value, clear=true) {
 	history.pushState({}, null, url);
 }
 
-function testNormal(msg, name, value, thisArg) {
-	chckNArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
-	checkArg(msg, value, thisArg);
+function testNormal(msg, name, argObj) {
+	checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
+	checkAllArgs(msg, argObj);
+
 	checkStackBanner(msg);
 	if (allCalls.length != 0) {
 		fail ("msg: extra args left over")
@@ -347,6 +414,6 @@ var config =  {
 			}
 		}
 	],
-	"types" : ["string"],
+	"types" : ["string", "function"],
 };
 
