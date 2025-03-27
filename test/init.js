@@ -263,7 +263,12 @@ function pushHistoryParam(key, value, clear=true) {
 }
 
 function testNormal(msg, name, argObj) {
-	checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
+	const argLen = Object.keys(argObj).length;
+	if (argLen > 1) {
+		checkArg(["%c[EV] %c%s[%d]%c %s", colNone, colGreen, name, argLen, colNone, location.href], `${msg} Normal Banner`);
+	} else {
+		checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
+	}
 	checkAllArgs(msg, argObj);
 
 	checkStackBanner(msg);

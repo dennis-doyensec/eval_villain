@@ -389,4 +389,17 @@
 		},
 	];
 	testInterset(t, "window.addEventListener", argObj, intArr);
+
+	// addEventListener("message", ...) custom
+	t = "asdf in addEventListener not interesting";
+	line = ["asdf"];
+	addEventListener("asdf", func);
+	testNormal(t, "window.addEventListener", {
+		0: {
+			line: line,
+		},
+		1: {
+			func: func,
+		}
+	});
 }
