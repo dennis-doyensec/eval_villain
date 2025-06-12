@@ -230,8 +230,12 @@ function checkAnInterest(msg, interest) {
 
 }
 
+function getArgLen(argObj) {
+	return Object.keys(argObj).filter(x => x != "this").length;
+}
+
 function testInterset(msg, name, argObj, interArray) {
-	const argLen = Object.keys(argObj).length;
+	const argLen = getArgLen(argObj);
 	if (argLen <= 1) {
 		checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
 	} else {
@@ -263,7 +267,7 @@ function pushHistoryParam(key, value, clear=true) {
 }
 
 function testNormal(msg, name, argObj) {
-	const argLen = Object.keys(argObj).length;
+	const argLen = getArgLen(argObj);
 	if (argLen > 1) {
 		checkArg(["%c[EV] %c%s[%d]%c %s", colNone, colGreen, name, argLen, colNone, location.href], `${msg} Normal Banner`);
 	} else {
