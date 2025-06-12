@@ -290,11 +290,10 @@ const rewriter = function(CONFIG) {
 		 * @param {object}	fifoBank Maps source name to `SourceFifo`
 		 **/
 		constructor(argConf) {
-			const needles = argConf?.needles;
-			if (needles) {
-				this.needles = needles === "global"
+			if (argConf?.sources) {
+				this.needles = argConf.needles === "global"
 					? NEEDLES
-					: new NeedleBundle(needles);
+					: new NeedleBundle(argConf);
 			}
 
 			if (argConf?.sources) {
@@ -314,6 +313,9 @@ const rewriter = function(CONFIG) {
 			const {str, type} = argObj;
 			if (!this.types.includes(type)) {
 				return;
+			}
+			if (str == 'message') {
+				debugger;
 			}
 
 			if (this.needles?.genStrMatches) {
@@ -395,8 +397,9 @@ const rewriter = function(CONFIG) {
 		}
 
 		function prettyJson(s, tabs) {
-			return real.JSON.stringify(s, null, 2)
-				.replaceAll('\n', '\n' + '\t'.repeat(tabs));
+			return real.replaceAll(
+				real.JSON.stringify(s, null, 2), 
+				'\n', '\n' + '\t'.repeat(tabs));
 		}
 
 		function *deepDecode(s) {
@@ -708,9 +711,6 @@ const rewriter = function(CONFIG) {
 
 		function printer(s, arg) {
 			const fmt = CONFIG.formats[s.name];
-			if (!fmt) {
-				throw `Can't find format for "${s.name}"`;
-			}
 			const display = s.display? s.display: s.name;
 			let word = s.search;
 			let dots = "";
