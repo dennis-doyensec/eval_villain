@@ -614,15 +614,11 @@ const rewriter = function(CONFIG) {
 
 	function printTitle(name, format, num) {
 		let titleGrp = "%c[EV] %c%s%c %s"
-		let func = real.logGroup;
 		const values = [
 			format.default, format.highlight, name, format.default, location.href
 		];
-
-		if (!format.open) {
-			func = real.logGroupCollapsed;
-		}
-		if (num >1) {
+		const func = format.open ?real.logGroup :real.logGroupCollapsed;
+		if (num > 1) {
 			// add arg number in format
 			titleGrp = "%c[EV] %c%s[%d]%c %s"
 			values.splice(3,0,num);
@@ -635,6 +631,7 @@ const rewriter = function(CONFIG) {
 	* Print all the arguments to the hooked funciton
 	*
 	* @argObj {Array} args array of arguments
+	* @argObj {thisArg} the `this` of a method call/setter
 	**/
 	function printArgs(argObj, thisArg) {
 		const argFormat = CONFIG.formats.args;
