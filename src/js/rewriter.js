@@ -290,10 +290,10 @@ const rewriter = function(CONFIG) {
 		 * @param {object}	fifoBank Maps source name to `SourceFifo`
 		 **/
 		constructor(argConf) {
-			if (argConf?.sources) {
-				this.needles = argConf.needles === "global"
-					? NEEDLES
-					: new NeedleBundle(argConf);
+			if (argConf?.sources && argConf.needles === "global") {
+				this.needles = NEEDLES;
+			} else {
+				this.needles = new NeedleBundle(argConf.needles);
 			}
 
 			if (argConf?.sources) {
@@ -313,9 +313,6 @@ const rewriter = function(CONFIG) {
 			const {str, type} = argObj;
 			if (!this.types.includes(type)) {
 				return;
-			}
-			if (str == 'message') {
-				debugger;
 			}
 
 			if (this.needles?.genStrMatches) {
@@ -354,17 +351,17 @@ const rewriter = function(CONFIG) {
 	 * Contains all rules to decide if a sink call should be considered interesting
 	 */
 	class SinkConf {
-		args = {};
+		perArgRules = {};
 		constructor(conf) {
 			for (const [argName, argConf] of Object.entries(conf.args)) {
-				this.args[argName] = new SinkArgConf(argConf);
+				this.perArgRules[argName] = new SinkArgConf(argConf);
 			}
 		}
 
 		*interestIterator(argObj) {
 			// TODO implmeent deeper per argument rules
 			for (const [key, value] of Object.entries(argObj.args)) {
-				const tester = this.args[key] ?? this.args["all"];
+				const tester = this.perArgRules[key] ?? this.perArgRules["all"];
 				if (tester) {
 					for (const ret of tester?.genSplits(value)) {
 						yield [ret, value];

@@ -61,6 +61,11 @@ document.write = () => {};
 document.writeln = () => {};
 console.groupEnd = () => {};
 
+// new globals you can use in rewriter for debugging
+// Will break EV in normal env, so you don't publish debug code
+xxxdir = console.dir;
+xxxlog = console.log;
+
 
 function fail(x) {
 	console.error(`[%cXX%c] ${x}`, "color:red", "color:None");
@@ -418,7 +423,7 @@ var config =  {
 					0: {
 						"needles": ["/^message$/"],
 						"types": ["string"],
-					}
+					},
 				}
 			}
 		}
