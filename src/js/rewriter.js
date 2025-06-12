@@ -205,6 +205,9 @@ const rewriter = function(CONFIG) {
 		 * const x = new NeedleBundle(["asdf", "/asdf/gi"]);
 		 **/
 		constructor(needleList) {
+			if (!Array.isArray(needleList)) {
+				throw `Needle bundle only accepts arrays, recieved ${typeof(needleList)}: "${needleList}"`;
+			}
 			this.needles = [];
 			this.regNeedle = [];
 			const test = /^\/(.*)\/(i|g|gi|ig)?$/;
@@ -257,26 +260,45 @@ const rewriter = function(CONFIG) {
 		}
 	}
 
-	/** Everything that might make a particular sink interesting */
-	class SearchBundle {
+	/** All rules for a single argument that might make that sink call interesting */
+	class SinkArgConf {
+		fifoBank = {};
+		needles = null;
 		/**
 		 * Contains qualifications for sink to be considered interesting
 		 * @param {NeedleBundle}	needles Needles ie user provided string/regex
 		 * @param {object}	fifoBank Maps source name to `SourceFifo`
 		 **/
-		constructor(needles, fifoBank) {
-			this.needles = needles;
-			this.fifoBank = fifoBank
+		constructor(argConf) {
+			if (argConf?.sources) {
+				this.needles = argConf.needles === "global"
+					? NEEDLES
+					: new NeedleBundle(argConf);
+			}
+
+			if (argConf?.sources) {
+				const srcs = argConf?.sources === "global"
+					? SOURCES
+					: argConf.sources;
+				srcs.forEach(src => this.fifoBank[src] = initSource(src));
+			}
+			this.types = argConf.types;
 		}
 
-		*genSplits(str) {
-			for (const match of this.needles.genStrMatches(str)) {
+		*genSplits(argObj) {
+			const {str, type} = argObj;
+			if (!this.types.includes(type)) {
+				return;
+			}
+
+			for (const match of this.needles?.genStrMatches(str)) {
 				yield {
 					name: "needle", decode:"",
 					search: match,
 					split: strSpliter(str, match)
 				};
 			}
+
 			for (const match of this.needles.genRegMatches(str)) {
 				yield {
 					name: "needle", decode:"",
@@ -297,9 +319,30 @@ const rewriter = function(CONFIG) {
 		}
 	}
 
-	let rotateWarnAt = 8;
+	/**
+	 * Contains all rules to decide if a sink call should be considered interesting
+	 */
+	class SinkConf {
+		args = {};
+		constructor(conf) {
+			for (const [argName, argConf] of Object.entries(conf)) {
+				this.args[argName] = new SinkArgConf(argConf);
+			}
+		}
 
-	// set of strings to search for
+		*interestIterator(argObj) {
+			// TODO implmeent deeper per argument rules
+			for (const [key, value] of Object.entries(argObj.args)) {
+				const tester = this.args[key] ?? this.args["all"];
+				for (const ret of tester?.genSplits(value)) {
+					yield [ret, value];
+				}
+			}
+		}
+	};
+
+	let rotateWarnAt = 8;
+	/** Recursivly decode source object and add it to selected fifo */
 	function addToFifo(sObj, fifoName) { // TODO: add blacklist arg
 		const fifo = ALLSOURCES[fifoName];
 		if (!fifo) {
@@ -622,7 +665,7 @@ const rewriter = function(CONFIG) {
 	*
 	* @argObj {Array} args array of arguments
 	**/
-	function getInterest(argObj, intrBundle) {
+	function getInterest(argObj, sinkConf) { // TODO: intigrate into sinkconf?
 
 		function printer(s, arg) {
 			const fmt = CONFIG.formats[s.name];
@@ -699,11 +742,8 @@ const rewriter = function(CONFIG) {
 			.forEach(nm => srcRefresher[nm]());
 
 		const ret = [];
-
-		for (const arg of argObj.args) {
-			for (const match of intrBundle.genSplits(arg.str)) {
-				ret.push(() => printer(match, arg));
-			}
+		for (const [match, arg] of sinkConf.interestIterator(argObj)) {
+			ret.push(() => printer(match, arg));
 		}
 
 		return ret;
@@ -872,25 +912,20 @@ const rewriter = function(CONFIG) {
 		replaceAll: "".replaceAll,
 	};
 
+	// build up global sources
+	const SOURCES = ["query", "fragment", "winname", "path", "referer", "localStore", "cookie"]
+		.filter(n => CONFIG.formats[n]?.use);
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
+	const NEEDLES = CONFIG.formats.needle?.use? new NeedleBundle(CONFIG.needles): null;
 	delete CONFIG.blacklist;
-	const GLOB_SINK_CONF = new SearchBundle(
-		new NeedleBundle(CONFIG.needles),
-		ALLSOURCES
-	);
+	const GLOB_SINK_CONF = new SinkConf({"all": {
+		"needles": "global",
+		"sources": "global",
+		"types": CONFIG.types,
+	}});
 	delete CONFIG.needles;
 
-	// build up ALLSOURCES
-	["query", "fragment", "winname", "path", "referer", "localStore", "cookie"].forEach(nm => {
-		if (CONFIG.formats[nm]?.use) {
-			initSource(nm);
-		}
-	});
-
-
-	for (const nm of CONFIG["functions"]) {
-		applyEvalVillain(nm);
-	}
+	CONFIG.functions.forEach(applyEvalVillain);
 
 	// turns console.log into console.info
 	if (CONFIG.formats.logReroute.use) {
