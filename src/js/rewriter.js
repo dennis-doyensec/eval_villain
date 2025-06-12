@@ -284,7 +284,7 @@ const rewriter = function(CONFIG) {
 				// if (url.hostname != location.hostname) {
 				// 	const dec = ``
 				// 		+ `\t{\n`
-				// 		+ `\t\tconst _ = new URL("${s.replaceAll('"', "%22")}");\n`
+				// 		+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
 				// 		+ `\t\t_.hostname = x;\n`
 				// 		+ `\t\tx = _.href;\n`
 				// 		+ `\t}\n`
@@ -296,8 +296,8 @@ const rewriter = function(CONFIG) {
 				for (const [key, value] of getAllQueryParams(url.search)) {
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL("${s.replaceAll('"', "%22")}");\n`
-						+ `\t\t_.searchParams.set('${key.replaceAll('"', '\x22')}', decodeURIComponent(x));\n`
+						+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
+						+ `\t\t_.searchParams.set('${real.replaceAll(key, '"', '\x22')}', decodeURIComponent(x));\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
 					+ decoded;
@@ -306,7 +306,7 @@ const rewriter = function(CONFIG) {
 				if (url.hash.length > 1) {
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL("${s.replaceAll('"', "%22")}");\n`
+						+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
 						+ `\t\t_.hash = x;\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
@@ -329,9 +329,9 @@ const rewriter = function(CONFIG) {
 			} catch (_) {/**/}
 
 			// string replace
-			const dec = s.replaceAll("+", " ");
+			const dec = real.replaceAll(s, "+", " ");
 			if (dec !== s) {
-				yield *decodeAll(dec, `\tx = x.replaceAll("+", " ");\n${decoded}`);
+				yield *decodeAll(dec, `\tx = real.replaceAll(x, "+", " ");\n${decoded}`);
 			}
 
 			if (!s.includes("%")) {
@@ -571,7 +571,7 @@ const rewriter = function(CONFIG) {
 					if (!s.param) break;
 					add +=  `const _ = new URL(window.location.href);\n\t`
 					add += `// next line might need some changes\n\t`;
-					add += `_.searchParams.set('${s.param.replaceAll('"', '\x22')}', decodeURIComponent(x));\n\t`;
+					add += `_.searchParams.set('${real.replaceAll(s.param, '"', '\x22')}', decodeURIComponent(x));\n\t`;
 					add += `x = _.href;\n\t`;
 					add += `if (y) window.location = x;\n\t`
 					pmtwo = true;
@@ -860,6 +860,7 @@ const rewriter = function(CONFIG) {
 		decodeURIComponent : decodeURIComponent,
 		decodeURI : decodeURI,
 		atob: atob,
+		replaceAll: "".replaceAll,
 	}
 
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);

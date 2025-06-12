@@ -332,7 +332,7 @@ var config =  {
 		"set(Element.innerHTML)",
 		"set(Element.outerHTML)",
 		"document.write",
-		"document.writeln"
+		"document.writeln",
 	],
 	"types" : ["string"],
 };
