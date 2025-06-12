@@ -363,8 +363,7 @@
 	testInterset(t, "eval", argObj, intArr);
 
 
-	// addEventListener("message", ...) custom
-	t = "postMessage init"
+	t = 'addEventListener("message", ...) custom interest'
 	line = ["", "message", ""];
 	const func = msg => {
 		console.debug('got postMessage');
@@ -390,7 +389,6 @@
 	];
 	testInterset(t, "window.addEventListener", argObj, intArr);
 
-	// addEventListener("message", ...) custom
 	t = "asdf in addEventListener not interesting";
 	line = ["asdf"];
 	addEventListener("asdf", func);
