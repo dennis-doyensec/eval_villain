@@ -40,7 +40,17 @@ const defaultConfig = {
 		}, {
 			"name" : "addEventListener",
 			"enabled" : true,
-			"pattern" : "window.addEventListener"
+			"pattern": {
+				"pattern" : "window.addEventListener",
+				"conf": {
+					"args": {
+						0: {
+							"needles": ["/^message$/"],
+							"types": ["string"],
+						},
+					}
+				}
+			}
 		}, {
 			"name" : "fetch",
 			"enabled" : true,
@@ -79,10 +89,6 @@ const defaultConfig = {
 			"name" : "asdf",
 			"enabled" : true,
 			"pattern" : "asdf"
-		}, {
-			"name" : "postMessage handler",
-			"enabled" : false,
-			"pattern" :"/^message$/"
 		}
 	],
 	"targets" : [
@@ -348,6 +354,9 @@ async function getConfigForRegister() {
 		if (i.enabled) {
 			config[i.name] = i.pattern;
 		}
+	}
+	if (config.formats?.userSource && !("sourcer" in Object.keys(config))) {
+		delete config.formats.userSource;
 	}
 
 	for (const what of ["needles", "blacklist", "functions", "types"]) {

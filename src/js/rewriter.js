@@ -873,7 +873,7 @@ const rewriter = function(CONFIG) {
 			ret.where = window;
 			const groups = n.split(".");
 			let i = 0; // outside for loop for a reason
-			for (i=0; i<groups.length-1; i++) {
+			for (i = 0; i < groups.length - 1; i++) {
 				ret.where = ret.where[groups[i]];
 				if (!ret.where) {
 					return null;
@@ -965,7 +965,7 @@ const rewriter = function(CONFIG) {
 			if (typeof(x) === 'string') {
 				applyEvalVillain(x, GLOB_SINK_CONF);
 			} else {
-				applyEvalVillain(x.name, new SinkConf(x.conf));
+				applyEvalVillain(x.pattern, new SinkConf(x.conf));
 			}
 		});
 	delete CONFIG.functions;
