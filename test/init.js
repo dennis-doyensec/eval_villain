@@ -417,7 +417,7 @@ var config =  {
 		"document.write",
 		"document.writeln",
 		{
-			"name": "window.addEventListener",
+			"pattern": "window.addEventListener",
 			"conf": {
 				"args": {
 					0: {
