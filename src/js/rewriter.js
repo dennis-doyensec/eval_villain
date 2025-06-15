@@ -4,10 +4,27 @@
  * want. Such as into a proxie'd response or electron instramentation.
  */
 const rewriter = function(CONFIG) {
+	// the rewriter could be injected anywhere, which makes lineNumber come out
+	// wrong in errors. LINESTART is used to correct it.
+	var LINESTART = new Error().lineNumber - 8;
+
 	// handled this way to preserve encoding...
 	function getAllQueryParams(search) {
 		return search.substr(search[0] == '?'? 1: 0)
 			.split("&").map(x => x.split(/=(.*)/s));
+	}
+
+	/**
+	 * Helper function, choses console.group vs console.groupCollapsed by bool
+	 */
+	function logGroup(format, ...args) {
+		const title = args[0];
+		if (format.open) {
+			real.logGroup(...args);
+		} else {
+			real.logGroupCollapsed(...args);
+		}
+		return args[0];
 	}
 
 	class SourceFifo {
@@ -225,6 +242,9 @@ const rewriter = function(CONFIG) {
 		 * const x = new NeedleBundle(["asdf", "/asdf/gi"]);
 		 **/
 		constructor(needleList) {
+			if (needleList === undefined) {
+				needleList = [];
+			}
 			if (!Array.isArray(needleList)) {
 				throw `Needle bundle only accepts arrays, recieved ${typeof(needleList)}: "${needleList}"`;
 			}
@@ -284,34 +304,44 @@ const rewriter = function(CONFIG) {
 	class SinkArgConf {
 		fifoBank = {};
 		needles = null;
+
 		/**
 		 * Contains qualifications for sink to be considered interesting
 		 * @param {NeedleBundle}	needles Needles ie user provided string/regex
 		 * @param {object}	fifoBank Maps source name to `SourceFifo`
 		 **/
 		constructor(argConf) {
-			if (argConf?.sources && argConf.needles === "global") {
-				this.needles = NEEDLES;
-			} else {
-				this.needles = new NeedleBundle(argConf.needles);
-			}
+			this.needles = argConf.needles === "global"
+				? NEEDLES
+				: new NeedleBundle(argConf.needles);
 
-			if (argConf?.sources) {
-				const srcs = argConf?.sources === "global"
-					? SOURCES
-					: argConf.sources;
-				srcs.forEach(src => this.fifoBank[src] = initSource(src));
-			}
-			this.types = argConf.types;
-			if (!this.types || !Array.isArray(this.types)) {
+			const srcs = argConf?.sources === "global"
+				? SOURCES
+				: argConf.sources;
+			srcs?.forEach(src => this.fifoBank[src] = initSource(src));
+
+			if (!argConf.types || !Array.isArray(argConf.types)) {
 				throw `[EV] missing types in sink config`;
 			}
+			this.types = new Set(argConf.types);
 
+			this.format = CONFIG.formats.args;
+			if (argConf.format) {
+				this.format = Object.assign({}, this.format);
+				Object.assign(this.format, argConf.format);
+			}
+		}
+
+		/**
+		 * Is this argument worth processing?
+		 */
+		allowedType(t) {
+			return this.types.has(t);
 		}
 
 		*genSplits(argObj) {
 			const {str, type} = argObj;
-			if (!this.types.includes(type)) {
+			if (!this.allowedType(type)) {
 				return;
 			}
 
@@ -358,16 +388,135 @@ const rewriter = function(CONFIG) {
 			}
 		}
 
+		getArgRule(argNum) {
+			return this.perArgRules[argNum] ?? this.perArgRules.all;
+		}
+
 		*interestIterator(argObj) {
 			// TODO implmeent deeper per argument rules
 			for (const [key, value] of Object.entries(argObj.args)) {
-				const tester = this.perArgRules[key] ?? this.perArgRules["all"];
+				const tester = this.getArgRule(key);
 				if (tester) {
 					for (const ret of tester?.genSplits(value)) {
 						yield [ret, value];
 					}
 				}
 			}
+		}
+
+		/**
+		* Grab only arguments that are relevent to testing
+		*
+		* @args {Object} args `arugments` object of hooked function
+		*/
+		getArgs(args, thisArg) {
+			function argToArgObj(rule, key, arg) {
+				const t = typeof(arg);
+				if (!rule?.allowedType(t)) {
+					return undefined;
+				}
+
+				let s = arg;
+				let cname = "";
+				if (t !== "string") {
+					if (t === "object") {
+						s = real.JSON.stringify(s);
+						cname = arg?.constructor.name ?? t;
+					} else {
+						s = s.toString();
+					}
+				}
+
+				const ar = {
+					"type": t,
+					"str": s,
+					"num": key,
+					"cname": cname,
+				}
+				if (t !== "string") {
+					ar["orig"] = arg;
+				}
+				return ar;
+			}
+			const retArgs = [];
+
+			if (typeof(arguments[Symbol.iterator]) !== "function") {
+				throw "Aguments can't be iterated over."
+			}
+
+			for (const i in args) {
+				if (args.hasOwnProperty(i)) {
+					const rule = this.getArgRule(+i);
+					const arg = argToArgObj(rule, +i, args[i]);
+					if (arg) {
+						retArgs.push(arg);
+					}
+				}
+			}
+
+			const ret = {
+				"args" : retArgs,
+				"len" : args.length // len of ret != len of args, if we threw some away
+			}
+			if (thisArg && thisArg !== window) {
+				const rule = this.getArgRule("thisArg");
+				const a = argToArgObj(rule, "thisArg", thisArg);
+				if (a) {
+					ret["thisArg"] = a;
+				}
+			}
+
+			return ret;
+		}
+
+		/**
+		* Print all the arguments to the hooked funciton
+		*
+		* @argObj {Array} args array of arguments
+		* @argObj {thisArg} the `this` of a method call/setter
+		**/
+		printArgs(argObj) {
+			function getArgPrinter(fmt, arg, indx, output) {
+				if (!fmt.use) return;
+				const cname = arg.cname
+					? ` constructor:${arg.cname}`
+					: "";
+
+				const end = logGroup(fmt, "%carg%s type:%s%s", fmt.default, indx, arg.type, cname);
+				if (output) {
+					if (typeof(output) === "string") {
+						real.log("%c%s", fmt.highlight, output);
+					} else {
+						real.log(output);
+					}
+				} else {
+					real.log("%c%s", fmt.highlight, arg.str);
+					if (arg.orig !== undefined) {
+						real.log(arg.orig);
+					}
+				}
+				real.logGroupEnd(end);
+			}
+
+			if (argObj.thisArg) {
+				const arg = argObj.thisArg;
+				const format = this.getArgRule(arg.num).format;
+				// this pargument parsing is not quite right still...
+				getArgPrinter(format, arg, "[this]", arg.orig);
+			}
+
+			if (argObj.len === 1 && argObj.args.length == 1) {
+				const arg = argObj.args[0];
+				const format = this.getArgRule(arg.num).format;
+				getArgPrinter(format, arg, "");
+			} else {
+				const total = argObj.len;
+				for (const i of argObj.args) {
+					const format = this.getArgRule(i.num).format;
+					getArgPrinter(format, i, `[${i.num + 1}/${total}]`);
+				}
+			}
+
 		}
 	};
 
@@ -395,7 +544,7 @@ const rewriter = function(CONFIG) {
 
 		function prettyJson(s, tabs) {
 			return real.replaceAll(
-				real.JSON.stringify(s, null, 2), 
+				real.JSON.stringify(s, null, 2),
 				'\n', '\n' + '\t'.repeat(tabs));
 		}
 
@@ -542,133 +691,36 @@ const rewriter = function(CONFIG) {
 	}
 
 	/**
-	* Helper function to turn parsable arguments into nice strings
-	* @arg {Object|string} arg Argument to be turned into a string
-	**/
-	function argToString(arg) {
-		if (typeof(arg) === "string")
-			return arg
-		if (typeof(arg) === "object")
-			return real.JSON.stringify(arg)
-		return arg.toString();
-	}
-
-	/**
 	* Returns the type of an argument. Returns null if the argument should be
 	* skipped.
-	* @arg arg Argument to have it's type checked
+	* @arg Argument to have it's type checked
+	* @arg Array of types that are acceptable.
 	*/
-	function typeCheck(arg) {
-		const knownTypes = [
-			"function", "string", "number", "object", "undefined", "boolean",
-			"symbol"
-		];
-		const t = typeof(arg);
+	function typeCheck(arg, argTypes) {
 
 		// sanity
-		if (!knownTypes.includes(t)) {
+		const knownType = ["function", "string", "number", "object",
+			"undefined", "boolean", "symbol" ].includes(t);
+		if (!knownType) {
 			throw `Unexpect argument type ${t} for ${arg}`;
 		}
 
 		// configured to not check
-		if (!CONFIG.types.includes(t)) {
+		if (!argTypes.includes(t)) {
 			return null;
 		}
 
 		return t;
 	}
 
-	/**
-	* Turn all arguments into strings and change record original type
-	*
-	* @args {Object} args `arugments` object of hooked function
-	*/
-	function getArgs(args) {
-		const ret = [];
-
-		if (typeof(arguments[Symbol.iterator]) !== "function") {
-			throw "Aguments can't be iterated over."
-		}
-
-		for (const i in args) {
-			if (!args.hasOwnProperty(i)) {
-				continue;
-			}
-			const t = typeCheck(args[i]);
-			if (t === null) continue;
-			const ar = {
-				"type": t,
-				"str": argToString(args[i]),
-				"num": +i,
-			}
-			if (t !== "string") {
-				ar["orig"] = args[i];
-			}
-			ret.push(ar);
-		}
-		return {"args" : ret, "len" : args.length};
-	}
-
+	// TODO clean this up
 	function printTitle(name, format, num) {
-		let titleGrp = "%c[EV] %c%s%c %s"
-		const values = [
-			format.default, format.highlight, name, format.default, location.href
-		];
-		const func = format.open ?real.logGroup :real.logGroupCollapsed;
 		if (num > 1) {
-			// add arg number in format
-			titleGrp = "%c[EV] %c%s[%d]%c %s"
-			values.splice(3,0,num);
+			return logGroup(format, "%c[EV] %c%s[%d]%c %s",
+				format.default, format.highlight, name, num, format.default, location.href);
 		}
-		func(titleGrp, ...values)
-		return titleGrp;
-	}
-
-	/**
-	* Print all the arguments to the hooked funciton
-	*
-	* @argObj {Array} args array of arguments
-	* @argObj {thisArg} the `this` of a method call/setter
-	**/
-	function printArgs(argObj, thisArg) {
-		const argFormat = CONFIG.formats.args;
-		if (!argFormat.use) return;
-		const func = argFormat.open ? real.logGroup : real.logGroupCollapsed;
-
-		if (thisArg && thisArg !== window) {
-			func("%carg[this]: %s: ", argFormat.default, thisArg.constructor.name);
-			real.log(thisArg);
-			real.logGroupEnd();
-		}
-
-		function printFuncAlso(arg) {
-			if (arg.type === "function" && arg.orig) {
-				real.log(arg.orig);
-			}
-		}
-
-		if (argObj.len === 1 && argObj.args.length == 1) {
-			const arg = argObj.args[0];
-			const argTitle ="%carg(%s):";
-			const data = [
-				argFormat.default,
-				arg.type,
-			];
-			func(argTitle, ...data);
-			real.log("%c%s", argFormat.highlight, arg.str);
-			printFuncAlso(arg);
-			real.logGroupEnd(argTitle);
-			return
-		}
-
-		const argTitle = "%carg[%d/%d](%s): "
-		const total = argObj.len;
-		for (const i of argObj.args) {
-			func(argTitle, argFormat.default, i.num + 1, total, i.type);
-			real.log("%c%s", argFormat.highlight, i.str);
-			printFuncAlso(i);
-			real.logGroupEnd(argTitle);
-		}
+		return logGroup(format,  "%c[EV] %c%s%c %s",
+			format.default, format.highlight, name, format.default, location.href);
 	}
 
 	function zebraBuild(arr, fmts) { // fmt2 is used via arguments
@@ -688,12 +740,7 @@ const rewriter = function(CONFIG) {
 
 	function zebraGroup(arr, fmt) {
 		const a = zebraBuild(arr, [fmt.default, fmt.highlight]);
-		if (fmt.open) {
-			real.logGroup(...a);
-		} else {
-			real.logGroupCollapsed(...a);
-		}
-		return a[0];
+		return logGroup(fmt, ...a);
 	}
 
 	/**
@@ -703,6 +750,9 @@ const rewriter = function(CONFIG) {
 	**/
 	function getInterest(argObj, sinkConf) { // TODO: intigrate into sinkconf?
 
+		/**
+		 * Builds a printer for an interesring argument
+		 */
 		function printer(s, arg) {
 			const fmt = CONFIG.formats[s.name];
 			const display = s.display? s.display: s.name;
@@ -794,44 +844,41 @@ const rewriter = function(CONFIG) {
 	**/
 	function EvalVillainHook(sinkConf, name, args, thisArg) {
 		const fmts = CONFIG.formats;
-		let argObj = {};
+		let argObj;
 		try {
-			argObj = getArgs(args);
+			argObj = sinkConf.getArgs(args, thisArg);
 		} catch(err) {
-			real.log("%c[ERROR]%c EV args error: %c%s%c on %c%s%c",
+			real.log("%c[ERROR]%c EV args error: %c%s%c on %c%s%c rewriter.js:%s",
 				fmts.interesting.default,
 				fmts.interesting.highlight,
 				fmts.interesting.default, err, fmts.interesting.highlight,
-				fmts.interesting.default, document.location.href, fmts.interesting.highlight
+				fmts.interesting.default, document.location.href, fmts.interesting.highlight,
+				err.lineNumber - LINESTART
 			);
 			return false;
 		}
 
-		if (argObj.args.length == 0) {
+		// TODO allow empty calls to be displayed
+		if (!argObj?.args.length) {
 			return false;
 		}
 
 		// does this call have an interesting result?
-		let format = null;
-		const printers = getInterest(argObj, sinkConf);
+		const interestingPrint = getInterest(argObj, sinkConf);
 
-		if (printers.length > 0) {
-			format = fmts.interesting;
-			if (!format.use) {
-				return false;
-			}
-		} else {
-			format = fmts.title;
-			if (!format.use) {
-				return false;
-			}
+		// is there any interest?
+		const format = interestingPrint.length
+			? fmts.interesting
+			: fmts.title;
+		if (!format.use) {
+			return;
 		}
 
-		const titleGrp = printTitle(name, format, argObj.len);
-		printArgs(argObj, thisArg);
+		const titleGrp = printTitle(name, format, interestingPrint.length);
+		sinkConf.printArgs(argObj);
 
 		// print all intereresting reuslts
-		printers.forEach(x=>x());
+		interestingPrint.forEach(x=>x());
 
 		// stack display
 		// don't put this into a function, it will be one more thing on the call
@@ -948,17 +995,22 @@ const rewriter = function(CONFIG) {
 
 	const BLACKLIST = new NeedleBundle(CONFIG.blacklist);
 	const NEEDLES = CONFIG.formats.needle?.use? new NeedleBundle(CONFIG.needles): null;
-	delete CONFIG.blacklist;
 	const GLOB_SINK_CONF = new SinkConf({
 		"args": {
 			"all": {
 				"needles": "global",
 				"sources": "global",
 				"types": CONFIG.types,
+			},
+			"thisArg": {
+				"types": ["function", "string", "number", "object",
+					"undefined", "boolean", "symbol"]
 			}
 		}
 	});
+	delete CONFIG.blacklist;
 	delete CONFIG.needles;
+	delete CONFIG.types;
 
 	CONFIG.functions
 		.forEach(x => {

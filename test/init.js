@@ -50,6 +50,12 @@ function addToCalls() {
 	allCalls.push(arguments);
 }
 
+// new globals you can use in rewriter for debugging
+// Will break EV in normal env, so you don't publish debug code
+xxxdir = console.dir;
+xxxlog = console.log;
+xxxtrace = console.trace;
+
 // replace native functions we use for testing
 console.log = addToCalls;
 console.group = addToCalls;
@@ -60,12 +66,6 @@ console.trace = () => {};
 document.write = () => {};
 document.writeln = () => {};
 console.groupEnd = () => {};
-
-// new globals you can use in rewriter for debugging
-// Will break EV in normal env, so you don't publish debug code
-xxxdir = console.dir;
-xxxlog = console.log;
-
 
 function fail(x) {
 	console.error(`[%cXX%c] ${x}`, "color:red", "color:None");
@@ -113,7 +113,17 @@ function argsIs(args, test) {
  * Pops msg from `allCalls` and checks if it matches `test`
 */
 function checkArg(test, msg) {
-	const why = argsIs(allCalls.shift(), test);
+
+	const args = allCalls.shift();
+	if (!args) {
+		fail(`[ERROR] '${msg}' Missing an expected output`);
+		const title = "Expected:";
+		cg(title);
+		cl(...test);
+		cge(title);
+		return;
+	}
+	const why = argsIs(args, test);
 	if (why === true) {
 		cgc(`[%c**%c] ${msg}`, "color:green", "color:None");
 		cl(...test);
@@ -145,42 +155,51 @@ function checkStackBanner(msg) {
 	checkArg(["%cstack: ","color:None"], `${msg} stack banner`);
 }
 
+function checkArgTitle(value, indx, msg) {
+	const ty = typeof(value);
+	const cname = ty === "object"
+		?  ` constructor:${value?.constructor.name}`
+		: "";
+	checkArg(["%carg%s type:%s%s", colNone, indx, typeof(value), cname ], `${msg} arg test`);
+}
+
 function checkAllArgs(msg, argObj) {
 	// handle this first
 	if (Object.keys(argObj).includes("this")) {
 		const {value} = argObj["this"];
-		checkArg([ "%carg[this]: %s: ", "color:None", value.constructor.name ], `${msg} THIS arg test`);
+		checkArgTitle(value, "[this]", `${msg} THIS`);
 		checkArg([value], `${msg} THIS arg value test`);
 	}
 
-	// remove this
+	// remove "this" from argumnets
 	const keys = Object.keys(argObj).filter(x => x !== "this");
 
 	if (keys.length == 1) {
 		const {line, func, type, value} = argObj[keys[0]];
+		const v = value ?? line?.join() ?? func;
 		if (func) {
-			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, "function"], `${msg} arg[${p}/${t}] title`);
+			checkArgTitle(v, "", msg);
 			checkArg(["%c%s", colGreen, func.toString()], `${msg} arg[${p}/${t}] value`);
 			checkArg([func], `${msg} arg[${p}/${t}] func ref`);
 		} else {
-			checkArg(["%carg(%s):", colNone, type ?? "string"], `${msg} arg test`);
-			checkArg(["%c%s", colGreen, value ?? line.join()], `${msg} Interesting args`);
+			checkArgTitle(value, "", msg);
+			checkArg(["%c%s", colGreen, v], `${msg} Interesting args`);
 		}
 		return;
 	}
 
 	const t = keys.length;
 	for (const key of keys) {
-		const {line, func, type} = argObj[key];
-		const p = parseInt(key, 10) + 1;
+		const {line, func, type, value, use} = argObj[key];
+		if (use == false) continue;
+		const v = value ?? line?.join() ?? func;
+		const idx = `[${parseInt(key, 10) + 1}/${t}]`
+		checkArgTitle(v, idx, `${msg} ${idx}`);
 		if (func) {
-			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, "function"], `${msg} arg[${p}/${t}] title`);
-			checkArg(["%c%s", colGreen, func.toString()], `${msg} arg[${p}/${t}] value`);
-			checkArg([func], `${msg} arg[${p}/${t}] func ref`);
+			checkArg(["%c%s", colGreen, func.toString()], `${msg} ${idx} value`);
+			checkArg([func], `${msg} arg${idx} func ref`);
 		} else {
-			const value = line.join(" ");
-			checkArg(["%carg[%d/%d](%s): ", colNone, p, t, type ?? "string"], `${msg} arg[${p}/${t}] test`);
-			checkArg(["%c%s", colGreen, value], `${msg} Interesting args`);
+			checkArg(["%c%s", colGreen, v], `${msg} Interesting args`);
 		}
 	}
 }
@@ -241,11 +260,7 @@ function getArgLen(argObj) {
 
 function testInterset(msg, name, argObj, interArray) {
 	const argLen = getArgLen(argObj);
-	if (argLen <= 1) {
-		checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
-	} else {
-		checkArg(["%c[EV] %c%s[%d]%c %s", colRed, colGreen, name, argLen, colRed, location.href], `${msg} Interesting Banner`);
-	}
+	checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
 
 	checkAllArgs(msg, argObj);
 	for (const interest of interArray) {
@@ -273,11 +288,7 @@ function pushHistoryParam(key, value, clear=true) {
 
 function testNormal(msg, name, argObj) {
 	const argLen = getArgLen(argObj);
-	if (argLen > 1) {
-		checkArg(["%c[EV] %c%s[%d]%c %s", colNone, colGreen, name, argLen, colNone, location.href], `${msg} Normal Banner`);
-	} else {
-		checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
-	}
+	checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
 	checkAllArgs(msg, argObj);
 
 	checkStackBanner(msg);
@@ -423,6 +434,15 @@ var config =  {
 					0: {
 						"needles": ["/^message$/"],
 						"types": ["string"],
+						"format": {
+							"use": false,
+						}
+					},
+					1: {
+						"types": ["function"],
+						"format": {
+							"use": true,
+						}
 					},
 				}
 			}

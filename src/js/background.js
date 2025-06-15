@@ -47,6 +47,15 @@ const defaultConfig = {
 						0: {
 							"needles": ["/^message$/"],
 							"types": ["string"],
+							"format": {
+								"use": false,
+							}
+						},
+						1: {
+							"types": ["function"],
+							"format": {
+								"use": true,
+							}
 						},
 					}
 				}

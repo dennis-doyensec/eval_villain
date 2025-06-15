@@ -365,17 +365,18 @@
 
 	t = 'addEventListener("message", ...) custom interest'
 	line = ["", "message", ""];
-	const func = msg => {
+	const postHander = msg => {
 		console.debug('got postMessage');
 		console.dir(msg);
 	}
-	addEventListener("message", func);
+	addEventListener("message", postHander);
 	argObj = {
 		0: {
 			line: ["message"],
+			use: false,
 		},
 		1: {
-			func: func,
+			func: postHander,
 		}
 	}
 	intArr = [
@@ -391,13 +392,14 @@
 
 	t = "asdf in addEventListener not interesting";
 	line = ["asdf"];
-	addEventListener("asdf", func);
+	addEventListener("asdf", postHander);
 	testNormal(t, "window.addEventListener", {
 		0: {
 			line: line,
+			use: false,
 		},
 		1: {
-			func: func,
+			func: postHander,
 		}
 	});
 }
