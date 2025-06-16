@@ -301,7 +301,6 @@ function testNormal(msg, name, argObj) {
 	}
 }
 
-
 const colNone = "color:None";
 const colGreen = "color:#088";
 const colBlue = "color:#147599";

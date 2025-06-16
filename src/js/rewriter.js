@@ -386,6 +386,18 @@ const rewriter = function(CONFIG) {
 			for (const [argName, argConf] of Object.entries(conf.args)) {
 				this.perArgRules[argName] = new SinkArgConf(argConf);
 			}
+			if (conf.onPreInterest) {
+				try {
+					this.onPreInterest = new Function("argObj", "real", conf.onPreInterest);
+				} catch(err) {
+					const fmts = CONFIG.formats.interesting;
+					real.log("%c[ERROR]%c EV onPreInterest: %c%s%c on %c%s%c rewriter.js:%s",
+						fmts.default, fmts.highlight, fmts.default, err,
+						fmts.highlight, fmts.default, document.location.href,
+						fmts.highlight, err.lineNumber - LINESTART
+					);
+				}
+			}
 		}
 
 		getArgRule(argNum) {
@@ -467,6 +479,24 @@ const rewriter = function(CONFIG) {
 			}
 
 			return ret;
+		}
+
+		runPreInterest(argObj) {
+			if (this.onPreInterest) {
+				try {
+					return this.onPreInterest(argObj, real);
+				} catch(err) {
+					const fmts = CONFIG.formats.interesting;
+					real.log("%c[ERROR]%c onPreInterest: %c%s%c on %c%s%c rewriter.js:%s",
+						fmts.default, fmts.highlight, fmts.default, err,
+						fmts.highlight, fmts.default, document.location.href,
+						fmts.highlight, err.lineNumber - LINESTART
+					);
+					real.dir(err);
+					real.log(this.onPreInterest);
+				}
+			}
+			return true;
 		}
 
 		/**
@@ -713,7 +743,6 @@ const rewriter = function(CONFIG) {
 		return t;
 	}
 
-	// TODO clean this up
 	function printTitle(name, format, num) {
 		if (num > 1) {
 			return logGroup(format, "%c[EV] %c%s[%d]%c %s",
@@ -856,6 +885,10 @@ const rewriter = function(CONFIG) {
 				err.lineNumber - LINESTART
 			);
 			return false;
+		}
+
+		if (!sinkConf.runPreInterest(argObj)) {
+			return;
 		}
 
 		// TODO allow empty calls to be displayed
