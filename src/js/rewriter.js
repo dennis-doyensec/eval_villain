@@ -432,7 +432,16 @@ const rewriter = function(CONFIG) {
 				let cname = "";
 				if (t !== "string") {
 					if (t === "object") {
-						s = real.JSON.stringify(s);
+						try {
+							s = real.JSON.stringify(s);
+						} catch(err) { // ciclic objects
+							const fmts = CONFIG.formats.interesting;
+							real.log("%c[EV WARNING]%c error while parsing argument %s rewriter.js:%s\n\tErr: %s\n\tObj: %s",
+								fmts.highlight, fmts.default, document.location.href,
+								err.lineNumber - LINESTART, err, arg
+							);
+							s = s.toString();
+						}
 						cname = arg?.constructor.name ?? t;
 					} else {
 						s = s.toString();
@@ -871,7 +880,9 @@ const rewriter = function(CONFIG) {
 	* @param {array}	args array of arguments
 	* @returns {boolean} Always returns `false`
 	**/
-	function EvalVillainHook(sinkConf, name, args, thisArg) {
+	function EvalVillainHook(conf, args, thisArg) {
+		const sinkConf = conf.conf;
+		const name = conf.name;
 		const fmts = CONFIG.formats;
 		let argObj;
 		try {
@@ -908,6 +919,11 @@ const rewriter = function(CONFIG) {
 		}
 
 		const titleGrp = printTitle(name, format, interestingPrint.length);
+		if (conf.why) {
+			const end = logGroup(CONFIG.formats.why, "Explanation:")
+			zebraLog(conf.why, CONFIG.formats.why);
+			real.logGroupEnd(end);
+		}
 		sinkConf.printArgs(argObj);
 
 		// print all intereresting reuslts
@@ -934,17 +950,26 @@ const rewriter = function(CONFIG) {
 	/**
 	* Applies the Eval Villain hook to a sink, using the sink configuration
 	*/
-	function applyEvalVillain(sinkName, sinkConf) {
+	function applyEvalVillain(sinkArg) {
+		const pattern = sinkArg.pattern;
+		sinkArg.conf = sinkArg.conf
+			? new SinkConf(sinkArg.conf)
+			: GLOB_SINK_CONF;
+
+		if (!CONFIG.formats.why.use && sinkArg.why) {
+			delete sinkArg.why;
+		}
+
 		class evProxy {
 			// Start of Eval Villain hook
 			apply(_target, thisArg, args) {
-				EvalVillainHook(sinkConf, sinkName, args, thisArg);
+				EvalVillainHook(sinkArg, args, thisArg);
 				return Reflect.apply(...arguments);
 			}
 
 			// Start of Eval Villain hook
 			construct(_target, args, _newArg) {
-				EvalVillainHook(sinkConf, sinkName, args, null);
+				EvalVillainHook(sinkArg, args, null);
 				return Reflect.construct(...arguments);
 			}
 		}
@@ -963,17 +988,18 @@ const rewriter = function(CONFIG) {
 			return ret ? ret : null;
 		}
 
-		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(sinkName);
+		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(pattern);
 		const ep = new evProxy();
 		if (ownprop) {
 			const prop = ownprop[1];
 			const f = getFunc(ownprop[2]);
 			const orig = Object.getOwnPropertyDescriptor(f.where.prototype, f.leaf)[prop];
 			Object.defineProperty(f.where.prototype, f.leaf, {[prop] : new Proxy(orig, ep)});
-		} else if (!/^[a-zA-Z.]+$/.test(sinkName)) {
-			real.log("[EV] name: %s invalid, not hooking", sinkName);
+		} else if (!/^[a-zA-Z.]+$/.test(pattern)) {
+			real.log("[EV] name: %s invalid, not hooking", pattern);
+			real.dir(pattern);
 		} else {
-			const f = getFunc(sinkName);
+			const f = getFunc(pattern);
 			f.where[f.leaf] = new Proxy(f.where[f.leaf], ep);
 		}
 	}
@@ -1045,14 +1071,7 @@ const rewriter = function(CONFIG) {
 	delete CONFIG.needles;
 	delete CONFIG.types;
 
-	CONFIG.functions
-		.forEach(x => {
-			if (typeof(x) === 'string') {
-				applyEvalVillain(x, GLOB_SINK_CONF);
-			} else {
-				applyEvalVillain(x.pattern, new SinkConf(x.conf));
-			}
-		});
+	CONFIG.functions.forEach(applyEvalVillain);
 	delete CONFIG.functions;
 
 	// turns console.log into console.info
@@ -1061,6 +1080,11 @@ const rewriter = function(CONFIG) {
 	}
 
 	if (CONFIG.sinker) {
+		const conf = {
+			name: CONFIG.sinker,
+			pattern: CONFIG.sinkArg,
+			conf: GLOB_SINK_CONF,
+		}
 		window[CONFIG.sinker] = (x,y) => EvalVillainHook(GLOB_SINK_CONF, x, y);
 		delete CONFIG.sinker;
 	}

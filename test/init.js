@@ -151,6 +151,14 @@ function checkArg(test, msg) {
 	};
 }
 
+function getFuncConfByName(nm) {
+	return config.functions.filter(x => x.name == nm)[0];
+}
+
+function getWhyByName(nm) {
+	return getFuncConfByName(nm)?.why;
+}
+
 function checkStackBanner(msg) {
 	checkArg(["%cstack: ","color:None"], `${msg} stack banner`);
 }
@@ -258,9 +266,19 @@ function getArgLen(argObj) {
 	return Object.keys(argObj).filter(x => x != "this").length;
 }
 
+function checkWhy(nm) {
+	const why = getWhyByName(nm);
+	if (why) {
+		checkArg(["Explanation:"], `${nm} Explanation group`);
+		const ar = ["%c%s", config.formats.why.default];
+		ar.push(...why);
+		checkArg(ar, `${nm} why`);
+	}
+}
+
 function testInterset(msg, name, argObj, interArray) {
-	const argLen = getArgLen(argObj);
 	checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
+	checkWhy(name);
 
 	checkAllArgs(msg, argObj);
 	for (const interest of interArray) {
@@ -289,6 +307,7 @@ function pushHistoryParam(key, value, clear=true) {
 function testNormal(msg, name, argObj) {
 	const argLen = getArgLen(argObj);
 	checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
+	checkWhy(name);
 	checkAllArgs(msg, argObj);
 
 	checkStackBanner(msg);
@@ -321,6 +340,13 @@ var config =  {
 			"open" : true,
 			"default" : colRed,
 			"highlight" : colGreen
+		},
+		"why": {
+			"pretty"	: "Explanation",
+			"use"		: true,
+			"open"		: false,
+			"default"	: colNone,
+			"highlight" : colGreen,
 		},
 		"args" : {
 			"pretty" : "Args Display",
@@ -421,12 +447,29 @@ var config =  {
 		"/^s*(?:true|false)s*$/gi"
 	],
 	"functions" : [
-		"eval",
-		"set(Element.innerHTML)",
-		"set(Element.outerHTML)",
-		"document.write",
-		"document.writeln",
 		{
+			"name": "eval",
+			"pattern": "eval",
+			"why": ["Eval is bad"],
+		}, {
+			"name": "innerHTML",
+			"pattern": "set(Element.innerHTML)",
+			"why": ["XSS is bad"],
+		}, {
+			"name": "outerHTML",
+			"pattern": "set(Element.outerHTML)",
+			"why": [""],
+		}, {
+			"name": "document.write",
+			"pattern": "document.write",
+			"why": [""],
+		}, {
+			"name": "document.writeln",
+			"pattern": "document.writeln",
+			"why": [""],
+		}, {
+			"name": "postMessage registered",
+			"why": [""],
 			"pattern": "window.addEventListener",
 			"conf": {
 				"args": {
@@ -449,4 +492,3 @@ var config =  {
 	],
 	"types" : ["string", "function"],
 };
-

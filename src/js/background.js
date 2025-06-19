@@ -4,82 +4,177 @@ const defaultConfig = {
 		{
 			"name" : "eval",
 			"enabled" : true,
-			"pattern" : "eval"
+			"pattern" : "eval",
+			"why":
+`The **eval** function runs arbitrary JavaScript provided as an argument as a string. User input in the string can lead to XSS. What variables are in scope of **eval** is complicated. Eval Villain forces **eval** to run in "indirect" mode, which can cause errors. You can disable this one function in the pop-up menu if you think it's causing problems with the site.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval
+`,
 		}, {
 			"name" : "Function",
 			"enabled" : true,
-			"pattern" : "Function"
+			"pattern" : "Function",
+			"why":
+`The last argument to **Function** is a string to be used as the body of a new JavaScript function. Similar to **eval**, an injection in that string can lead to XSS.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function
+`,
 		}, {
 			"name" : "innerHTML",
 			"enabled" : true,
-			"pattern" : "set(Element.innerHTML)"
+			"pattern" : "set(Element.innerHTML)",
+			"why":
+`The **innerHTML** setter is used to set the HTML content of a parent node. Unfiltered user input here is one of the most common DOM XSS vectors. Script tags are not allowed but **<img src=1 onerror=alert(1)>** will work.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
+`,
 		}, {
 			"name" : "outerHTML",
 			"enabled" : true,
-			"pattern" : "set(Element.outerHTML)"
+			"pattern" : "set(Element.outerHTML)",
+			"why":
+`The outerHTML has similar security concerns as innerHTML, it adds . Unfiltered user input here is one of the most common DOM XSS vectors. Script tags are not allowed but **<img src=1 onerror=alert(1)>** will work.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
+`,
 		}, {
 			"name" : "createContextualFragment",
 			"enabled" : true,
-			"pattern" : "value(Range.createContextualFragment)"
+			"pattern" : "value(Range.createContextualFragment)",
+			"why":
+`The **Range.createContextualFragment** is similar to **innerHTML**. It creates a **DocumentFragment**, which represents a document object with no parent. If user input hits this and it's added to the pages **document**, then XSS is possible. Often though, this is used as a staging area by sanitizers to ensure no JavaScript passes though.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Range/createContextualFragment
+`,
 		}, {
 			"name" : "document.write",
 			"enabled" : true,
-			"pattern" : "document.write"
+			"pattern" : "document.write",
+			"why":
+`The **document.write** function writes the HTML to the document. Often used by ads and safeframes to inject it's content into a **iframe**. User input that includes HTML can cause XSS.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Document/write
+`,
 		}, {
 			"name" : "document.writeln",
 			"enabled" : true,
-			"pattern" : "document.writeln"
+			"pattern" : "document.writeln",
+			"why":
+`The **document.writeln** function writes the HTML to the document. Similar to **document.write**. User input that includes HTML can cause XSS.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Document/writeln
+`,
 		}, {
 			"name" : "setTimeout",
 			"enabled" : true,
-			"pattern" : "setTimeout"
+			"pattern" : "setTimeout",
+			"why":
+`The **setTimeout** function can accept as a string to execute as JavaScript. Injection into the string can cause XSS.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout
+`,
 		}, {
 			"name" : "setInterval",
 			"enabled" : true,
-			"pattern" : "setInterval"
+			"pattern" : "setInterval",
+			"why":
+`The **setInterval** function can accept as a string to execute as JavaScript. Injection into the string can cause XSS.
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval
+`,
 		}, {
 			"name" : "addEventListener",
 			"enabled" : true,
-			"pattern": {
-				"pattern" : "window.addEventListener",
-				"conf": {
-					"args": {
-						0: {
-							"needles": ["/^message$/"],
-							"types": ["string"],
-							"format": {
-								"use": false,
-							}
-						},
-						1: {
-							"types": ["function"],
-							"format": {
-								"use": true,
-							}
-						},
-					}
+			"pattern" : "window.addEventListener",
+			"conf": {
+				"args": {
+					0: {
+						"needles": ["/^message$/"],
+						"types": ["string"],
+						"format": {
+							"use": false,
+						}
+					},
+					1: {
+						"types": ["function"],
+						"format": {
+							"use": true,
+						}
+					},
 				}
-			}
+			},
+			"why":
+`Calling **addEventListener("message", func)** results in registering the **func** function as a **postMessage** handler. This function will process **postMessag**s from other windows, cross origin. So if these requests are mishandled, a XSS might be possible. To test, click the displayed function below and check if the **origin** of the message is checked correctly. Alternatively, you can add a "conditional breakpoint" in the debugger that uses Eval Villains **evSinker** global to add the **data** of the message to Eval Villain sources (Something like: **evSinker("postMessage handler", msg.data, true))**
+
+References:
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage#security_concerns
+`,
 		}, {
 			"name" : "fetch",
 			"enabled" : true,
-			"pattern" : "fetch"
+			"pattern" : "fetch",
+			"why":
+`The **fetch** function is commonly used to query API servers with HTTP requests. Injection into the path or domain of the request can cause the request to go to the wrong location. If the results of the request are trusted for DOM operations, then XSS might be possible indirectly. If the request can be redirected to a location that performs a state changing affect, then CSRF might be possible.
+
+References:
+	CSPT2CSRF: https://blog.doyensec.com/2024/07/02/cspt2csrf.html
+	CSPT Eval Villains way: https://blog.doyensec.com/2024/12/03/cspt-with-eval-villain.html
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
+`,
 		}, {
 			"name" : "XMLHttpRequest",
 			"enabled" : true,
-			"pattern" : "value(XMLHttpRequest.open)"
+			"pattern" : "value(XMLHttpRequest.open)",
+			"why":
+`The **XMLHttpRequest.open** function is commonly used to query API servers with HTTP requests. Injection into the path or domain of the request can cause the request to go to the wrong location. If the results of the request are trusted for DOM operations, then XSS might be possible indirectly. If the request can be redirected to a location that performs a state changing affect, then CSRF might be possible.
+
+References:
+	CSPT2CSRF: https://blog.doyensec.com/2024/07/02/cspt2csrf.html
+	CSPT Eval Villains way: https://blog.doyensec.com/2024/12/03/cspt-with-eval-villain.html
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
+`,
 		}, {
 			"name" : "URLSearchParams.get",
 			"enabled" : false,
-			"pattern" : "value(URLSearchParams.get)"
+			"pattern" : "value(URLSearchParams.get)",
+			"why":
+`The **URLSearchParams.get** is often used to parse the URL parameters of the parent page. This is probably showing up as an interesting finding because a URL parameter is being parsed. Following the stack trace may lead you to find other URL parameters that this website uses, that may not be in the URL bar yet. Auditing or instrumenting the code can thus yield hidden URL parameters and expose functionality.
+
+References:
+	Example see **Step 2: Hooking non-native code**: https://blog.doyensec.com/2023/09/25/clientside-javascript-instrumentation.html
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/get
+`,
 		}, {
 			"name" : "decodeURI",
 			"enabled" : false,
-			"pattern" : "decodeURI"
+			"pattern" : "decodeURI",
+			"why":
+`The **decodeURI** is often used to parse the URL parameters of the parent page. This is probably showing up as an interesting finding because a URL parameter is being parsed. Following the stack trace may lead you to find other URL parameters that this website uses, that may not be in the URL bar yet. Auditing or instrumenting the code can thus yield hidden URL parameters and expose functionality.
+
+References:
+	Example see **Step 2: Hooking non-native code**: https://blog.doyensec.com/2023/09/25/clientside-javascript-instrumentation.html
+	MDN: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/decodeURI
+`,
 		}, {
 			"name" : "decodeURIComponent",
 			"enabled" : false,
-			"pattern" : "decodeURIComponent"
+			"pattern" : "decodeURIComponent",
+			"why":
+`The **decodeURIComponent** is often used to parse the URL parameters of the parent page. This is probably showing up as an interesting finding because a URL parameter is being parsed. Following the stack trace may lead you to find other URL parameters that this website uses, that may not be in the URL bar yet. Auditing or instrumenting the code can thus yield hidden URL parameters and expose functionality.
+
+References:
+	Example see **Step 2: Hooking non-native code**: https://blog.doyensec.com/2023/09/25/clientside-javascript-instrumentation.html
+	MDN: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/decodeURIComponent
+`,
 		}
 	],
 	"blacklist" : [
@@ -171,6 +266,13 @@ const defaultConfig = {
 			"open"		: false,
 			"default"	: "color: none",
 			"highlight" : "color: #088"
+		}, {
+			"name"		: "why",
+			"pretty"	: "Explanation",
+			"use"		: true,
+			"open"		: false,
+			"default"	: "color: none",
+			"highlight" : "font-weight: bold"
 		}, {
 			"name"		: "needle",
 			"pretty"	: "Needles Search",
@@ -368,11 +470,24 @@ async function getConfigForRegister() {
 		delete config.formats.userSource;
 	}
 
-	for (const what of ["needles", "blacklist", "functions", "types"]) {
+	for (const what of ["needles", "blacklist", "types"]) {
 		config[what] = dbconf[what]
 			.filter(x => x.enabled)
 			.map(x => x.pattern);
 	}
+
+	config.functions = dbconf.functions
+		.filter(x => {
+			if (x.enabled) {
+				delete x.enabled;
+				if (x.why) {
+					x.why = x.why.split("**"); // for zebra printing
+				}
+				return true;
+			}
+			return false;
+	});
+	config.functions.forEach(x => delete x.enabled);
 
 	// target stuff {
 	const match = [];
