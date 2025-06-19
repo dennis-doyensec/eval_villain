@@ -20,7 +20,7 @@
 	let value = 'z980j4kd0';
 	const domObj = document.getElementById('here')
 	domObj.innerHTML = value;
-	testNormal(t, "set(Element.innerHTML)", {
+	testNormal(t, "innerHTML", {
 		"this": {
 			value: domObj,
 			type: "object",
@@ -32,7 +32,7 @@
 
 	t = "outerHTML no interest"
 	domObj.outerHTML = value;
-	testNormal(t, "set(Element.outerHTML)", {
+	testNormal(t, "outerHTML", {
 		"this": {
 			value: domObj,
 			type: "object",
@@ -388,12 +388,12 @@
 			arg: 0,
 		},
 	];
-	testInterset(t, "window.addEventListener", argObj, intArr);
+	testInterset(t, "postMessage registered", argObj, intArr);
 
 	t = "asdf in addEventListener not interesting";
 	line = ["asdf"];
 	addEventListener("asdf", postHander);
-	testNormal(t, "window.addEventListener", {
+	testNormal(t, "postMessage registered", {
 		0: {
 			line: line,
 			use: false,
