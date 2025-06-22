@@ -55,6 +55,7 @@ function addToCalls() {
 xxxdir = console.dir;
 xxxlog = console.log;
 xxxtrace = console.trace;
+zzzdebug = () => {debugger};
 
 // replace native functions we use for testing
 console.log = addToCalls;
@@ -81,6 +82,15 @@ function argsToPrintable(args) {
 
 function printNextArgs() {
 	cl(argsToPrintable(allCalls[0]));
+}
+
+/**
+ * Helper function, choses console.group vs console.groupCollapsed by bool
+ */
+function logGroup(...args) {
+	const title = args[0];
+	cg(...args);
+	return args[0];
 }
 
 /**
@@ -113,7 +123,6 @@ function argsIs(args, test) {
  * Pops msg from `allCalls` and checks if it matches `test`
 */
 function checkArg(test, msg) {
-
 	const args = allCalls.shift();
 	if (!args) {
 		fail(`[ERROR] '${msg}' Missing an expected output`);
@@ -121,34 +130,34 @@ function checkArg(test, msg) {
 		cg(title);
 		cl(...test);
 		cge(title);
-		return;
+		return false;
 	}
+
 	const why = argsIs(args, test);
 	if (why === true) {
 		cgc(`[%c**%c] ${msg}`, "color:green", "color:None");
 		cl(...test);
 		cge();
-	} else {
-		fail(msg);
-		const erinfo = "Error Info:";
-		cg(erinfo);
-			for (const i of why.off) {
-				cl(i);
-			}
+		return true;
+	}
 
-			const got = "got: ";
-			cg(got);
-				cl(argsToPrintable(why.got));
-				cl(...why.got);
-			cge();
+	fail(msg);
+	const erinfo = logGroup("Error Info:");
+		for (const i of why.off) {
+			cl(i);
+		}
 
-			const exp = "expected: "
-			cg(exp);
-				cl("expected: ", JSON.stringify(why.expect, null, 2));
-				cl(...why.expect);
-			cge(exp);
-		cge(erinfo)
-	};
+		const got = logGroup("got: ");
+			cl(argsToPrintable(why.got));
+			cl(...why.got);
+		cge(got);
+
+		const exp = logGroup("expected: ");
+			cl("expected: ", JSON.stringify(why.expect, null, 2));
+			cl(...why.expect);
+		cge(exp);
+	cge(erinfo)
+	return false;
 }
 
 function getFuncConfByName(nm) {
@@ -160,7 +169,7 @@ function getWhyByName(nm) {
 }
 
 function checkStackBanner(msg) {
-	checkArg(["%cstack: ","color:None"], `${msg} stack banner`);
+	return checkArg(["%cstack: ","color:None"], `${msg} stack banner`);
 }
 
 function checkArgTitle(value, indx, msg) {
@@ -168,85 +177,58 @@ function checkArgTitle(value, indx, msg) {
 	const cname = ty === "object"
 		?  ` constructor:${value?.constructor.name}`
 		: "";
-	checkArg(["%carg%s type:%s%s", colNone, indx, typeof(value), cname ], `${msg} arg test`);
+	return checkArg(["%carg%s type:%s%s", colNone, indx, typeof(value), cname ], `${msg} arg test`);
 }
 
-function checkAllArgs(msg, argObj) {
-	// handle this first
-	if (Object.keys(argObj).includes("this")) {
-		const {value} = argObj["this"];
-		checkArgTitle(value, "[this]", `${msg} THIS`);
-		checkArg([value], `${msg} THIS arg value test`);
-	}
+function checkAllArgs(msg, argArr) {
+	let ret = true;
+	for (const argDis of argArr) {
+		const {value, key} = argDis;
+		const display = argDis.display ?? `[${key}]`;
+		ret &= checkArgTitle(value, display, `${msg} ${display} title`);
 
-	// remove "this" from argumnets
-	const keys = Object.keys(argObj).filter(x => x !== "this");
-
-	if (keys.length == 1) {
-		const {line, func, type, value} = argObj[keys[0]];
-		const v = value ?? line?.join() ?? func;
-		if (func) {
-			checkArgTitle(v, "", msg);
-			checkArg(["%c%s", colGreen, func.toString()], `${msg} arg[${p}/${t}] value`);
-			checkArg([func], `${msg} arg[${p}/${t}] func ref`);
+		if (typeof(value) === 'function') {
+			ret &= checkArg(["%c%s", colGreen, value.toString()], `${msg} ${display} value`);
+			ret &= checkArg([value], `${msg} arg${display} func ref`);
+		} else if (typeof(value) === 'object') {
+			ret &= checkArg([value], `${msg} ${display} value`);
 		} else {
-			checkArgTitle(value, "", msg);
-			checkArg(["%c%s", colGreen, v], `${msg} Interesting args`);
-		}
-		return;
-	}
-
-	const t = keys.length;
-	for (const key of keys) {
-		const {line, func, type, value, use} = argObj[key];
-		if (use == false) continue;
-		const v = value ?? line?.join() ?? func;
-		const idx = `[${parseInt(key, 10) + 1}/${t}]`
-		checkArgTitle(v, idx, `${msg} ${idx}`);
-		if (func) {
-			checkArg(["%c%s", colGreen, func.toString()], `${msg} ${idx} value`);
-			checkArg([func], `${msg} arg${idx} func ref`);
-		} else {
-			checkArg(["%c%s", colGreen, v], `${msg} Interesting args`);
+			ret &= checkArg(["%c%s", colGreen, value], `${msg} Interesting args`);
 		}
 	}
+	return ret;
 }
 
 function checkAnInterest(msg, interest) {
 	const {
-		decoded, reason, needle, arg, c, line
+		decoded, reason, needle, arg, c, line, display
 	} = interest;
 	const col = c ?? colGreen;
 
-
 	const ban = [colNone,`${reason}: `, col, needle, colNone];
-	if (typeof(arg) === 'number') {
-		ban.push(
-			" found (arg:",
-			"color:#088",
-			arg,
-			"color:None",
-			")"
-		);
-	} else {
-		ban.push(" found");
-	}
+	ban.push(
+		" found (arg:",
+		"color:#088",
+		display ?? '[1/1]',
+		"color:None",
+		")"
+	);
 	if (decoded) {
 		ban.push(col, " [Decoded]");
 	}
 
-	checkArg(["%c%s".repeat(ban.length / 2)].concat(ban), `${msg} Interesting highlight`);
+	let ret = checkArg(["%c%s".repeat(ban.length / 2)].concat(ban), `${msg} Interesting highlight title`);
 	if (decoded) {
-		checkArg(["Encoder function:"], `${msg} Encoder Highlight`);
+		ret &= checkArg(["Encoder function:"], `${msg} Encoder Highlight`);
 		const encoder = allCalls.shift();
 		if (encoder.length != 1) {
+			ret = false;
 			fail("Encoder not a single arg");
-		cl(JSON.stringify(encoder, null, 2));
+			cl(JSON.stringify(encoder, null, 2));
 		} else {
 			cl("TODO: Check if encoder makes sense:");
 			cl(encoder[0]);
 		}
-		new Function
 	}
 
 	const test = ["%c%s".repeat(line.length)];
@@ -257,9 +239,8 @@ function checkAnInterest(msg, interest) {
 		test.push(f);
 		ci = (ci+1)%2;
 	}
-	checkArg(test, `${msg} Interesting highlight`);
-
-
+	ret &= checkArg(test, `${msg} Interesting highlight`);
+	return ret;
 }
 
 function getArgLen(argObj) {
@@ -267,32 +248,36 @@ function getArgLen(argObj) {
 }
 
 function checkWhy(nm) {
+	let ret = true;
 	const why = getWhyByName(nm);
 	if (why) {
-		checkArg(["Explanation:"], `${nm} Explanation group`);
+		ret = checkArg(["Explanation:"], `${nm} Explanation group`);
 		const ar = ["%c%s", config.formats.why.default];
 		ar.push(...why);
-		checkArg(ar, `${nm} why`);
+		ret &= checkArg(ar, `${nm} why`);
 	}
+	return ret;
 }
 
-function testInterset(msg, name, argObj, interArray) {
-	checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
-	checkWhy(name);
+function testInterset(msg, name, argArr, interArray) {
+	let ret = checkArg(["%c[EV] %c%s%c %s", colRed, colGreen, name, colRed, location.href], `${msg} Interesting Banner`);
+	ret &= checkWhy(name);
 
-	checkAllArgs(msg, argObj);
+	ret &= checkAllArgs(msg, argArr);
 	for (const interest of interArray) {
-		checkAnInterest(msg, interest);
+		ret &= checkAnInterest(msg, interest);
 	}
 
-	checkStackBanner(msg);
+	ret &= checkStackBanner(msg);
 	if (allCalls.length != 0) {
 		fail ("msg: extra args left over")
 		while (allCalls.length > 0) {
 			printNextArgs();
 			allCalls.shift();
 		}
+		return false;
 	}
+	return ret;
 }
 
 function pushHistoryParam(key, value, clear=true) {
@@ -304,20 +289,23 @@ function pushHistoryParam(key, value, clear=true) {
 	history.pushState({}, null, url);
 }
 
-function testNormal(msg, name, argObj) {
-	const argLen = getArgLen(argObj);
-	checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
-	checkWhy(name);
-	checkAllArgs(msg, argObj);
+function testNormal(msg, name, argArr) {
+	const argLen = getArgLen(argArr);
+	let ret = true;
+	ret &= checkArg(["%c[EV] %c%s%c %s", colNone, colGreen, name, colNone, location.href], `${msg} Normal Banner`);
+	ret &= checkWhy(name);
+	ret &= checkAllArgs(msg, argArr);
 
-	checkStackBanner(msg);
+	ret &= checkStackBanner(msg);
 	if (allCalls.length != 0) {
+		ret = false;
 		fail ("msg: extra args left over")
 		while (allCalls.length > 0) {
 			printNextArgs();
 			allCalls.shift();
 		}
 	}
+	return ret;
 }
 
 const colNone = "color:None";
@@ -486,6 +474,29 @@ var config =  {
 							"use": true,
 						}
 					},
+				}
+			}
+		}, {
+			"name": "fetch",
+			"why": ["could be cspt?"],
+			"pattern": "fetch",
+			"conf": {
+				"args": {
+					0: {
+						"types": ["string"],
+						"parseAsConf": {
+							"parseAs": "URL",
+							"keys": ["pathname", "hostname"]
+						}
+					},
+					"all": {
+						"types": ["string"],
+						"needles": "global",
+						"sources": "global",
+						"format": {
+							"use": false,
+						},
+					}
 				}
 			}
 		}

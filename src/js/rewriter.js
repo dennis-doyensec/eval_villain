@@ -6,12 +6,19 @@
 const rewriter = function(CONFIG) {
 	// the rewriter could be injected anywhere, which makes lineNumber come out
 	// wrong in errors. LINESTART is used to correct it.
-	var LINESTART = new Error().lineNumber - 8;
+	const LINESTART = new Error().lineNumber + 1;
 
-	// handled this way to preserve encoding...
-	function getAllQueryParams(search) {
-		return search.substr(search[0] == '?'? 1: 0)
-			.split("&").map(x => x.split(/=(.*)/s));
+	/**
+	 * Consistent error formats
+	 */
+	function logErr(err, title) {
+		const fmt = CONFIG.formats.interesting;
+		const lineno = err.lineNumber + LINESTART;
+		if (title) {
+			zebraLog([`[EV ERROR] from: ${location.href} ${title} err:`, err, ` rewriter.js:${lineno}`], fmt);
+		} else {
+			zebraLog([`[EV ERROR] from: ${location.href} err:`, err, ` rewriter.js:${lineno}`], fmt);
+		}
 	}
 
 	/**
@@ -25,6 +32,12 @@ const rewriter = function(CONFIG) {
 			real.logGroupCollapsed(...args);
 		}
 		return args[0];
+	}
+
+	// handled this way to preserve encoding...
+	function getAllQueryParams(search) {
+		return search.substr(search[0] == '?'? 1: 0)
+			.split("&").map(x => x.split(/=(.*)/s));
 	}
 
 	class SourceFifo {
@@ -113,7 +126,7 @@ const rewriter = function(CONFIG) {
 				let url;
 				try {
 					url = new URL(document.referrer);
-				} catch (_err) {
+				} catch(_err) {
 					return;
 				};
 
@@ -304,6 +317,7 @@ const rewriter = function(CONFIG) {
 	class SinkArgConf {
 		fifoBank = {};
 		needles = null;
+		parseRules = null;
 
 		/**
 		 * Contains qualifications for sink to be considered interesting
@@ -329,6 +343,25 @@ const rewriter = function(CONFIG) {
 			if (argConf.format) {
 				this.format = Object.assign({}, this.format);
 				Object.assign(this.format, argConf.format);
+			}
+
+			if (argConf.parseAsConf && argConf.constructor === Object) {
+				const {parseAs, keys} = argConf.parseAsConf;
+				if (!(parseAs && keys && Array.isArray(keys) && typeof(parseAs) === 'string')) {
+					real.log(`[EV] invalid parseAs ${argConf.parseAs}`);
+					return;
+				}
+
+				if (parseAs === 'URL') {
+					this.parseAs = function* (str) {
+						const url = new URL(str, location.href);
+						for (const key of keys) {
+							yield [`${parseAs}:${key}`, url[key]];
+						}
+					}
+				} else {
+					real.log(`[EV] unkown parseAs ${parseAs}`);
+				}
 			}
 		}
 
@@ -382,35 +415,32 @@ const rewriter = function(CONFIG) {
 	 */
 	class SinkConf {
 		perArgRules = {};
+
 		constructor(conf) {
 			for (const [argName, argConf] of Object.entries(conf.args)) {
-				this.perArgRules[argName] = new SinkArgConf(argConf);
+				const rule = new SinkArgConf(argConf);
+				this.perArgRules[argName] = rule;
 			}
+
 			if (conf.onPreInterest) {
 				try {
 					this.onPreInterest = new Function("argObj", "real", conf.onPreInterest);
 				} catch(err) {
-					const fmts = CONFIG.formats.interesting;
-					real.log("%c[ERROR]%c EV onPreInterest: %c%s%c on %c%s%c rewriter.js:%s",
-						fmts.default, fmts.highlight, fmts.default, err,
-						fmts.highlight, fmts.default, document.location.href,
-						fmts.highlight, err.lineNumber - LINESTART
-					);
+					logErr(err, "onPreInterest function execution");
 				}
 			}
 		}
 
-		getArgRule(argNum) {
-			return this.perArgRules[argNum] ?? this.perArgRules.all;
+		getArgRule(argKey) {
+			return this.perArgRules[argKey] ?? this.perArgRules.all;
 		}
 
 		*interestIterator(argObj) {
-			// TODO implmeent deeper per argument rules
-			for (const [key, value] of Object.entries(argObj.args)) {
-				const tester = this.getArgRule(key);
-				if (tester) {
-					for (const ret of tester?.genSplits(value)) {
-						yield [ret, value];
+			for (const arg of argObj.args) {
+				const rules = this.getArgRule(arg.key);
+				if (rules) {
+					for (const ret of rules.genSplits(arg)) {
+						yield [ret, arg];
 					}
 				}
 			}
@@ -422,7 +452,10 @@ const rewriter = function(CONFIG) {
 		* @args {Object} args `arugments` object of hooked function
 		*/
 		getArgs(args, thisArg) {
-			function argToArgObj(rule, key, arg) {
+			const retArgs = [];
+
+			const argToArgObj = (key, arg, display) => {
+				const rule = this.getArgRule(key);
 				const t = typeof(arg);
 				if (!rule?.allowedType(t)) {
 					return undefined;
@@ -435,12 +468,7 @@ const rewriter = function(CONFIG) {
 						try {
 							s = real.JSON.stringify(s);
 						} catch(err) { // ciclic objects
-							const fmts = CONFIG.formats.interesting;
-							real.log("%c[EV WARNING]%c error while parsing argument %s rewriter.js:%s\n\tErr: %s\n\tObj: %s",
-								fmts.highlight, fmts.default, document.location.href,
-								err.lineNumber - LINESTART, err, arg
-							);
-							s = s.toString();
+							logErr(err, "Failed to stringify argument");
 						}
 						cname = arg?.constructor.name ?? t;
 					} else {
@@ -450,8 +478,9 @@ const rewriter = function(CONFIG) {
 
 				const ar = {
 					"type": t,
+					"key": key,
+					"display": display,
 					"str": s,
-					"num": key,
 					"cname": cname,
 				}
 				if (t !== "string") {
@@ -459,18 +488,38 @@ const rewriter = function(CONFIG) {
 				}
 				return ar;
 			}
-			const retArgs = [];
 
 			if (typeof(arguments[Symbol.iterator]) !== "function") {
 				throw "Aguments can't be iterated over."
 			}
 
+			const argLen = args.length;
 			for (const i in args) {
-				if (args.hasOwnProperty(i)) {
-					const rule = this.getArgRule(+i);
-					const arg = argToArgObj(rule, +i, args[i]);
-					if (arg) {
-						retArgs.push(arg);
+				if (!args.hasOwnProperty(i)) {
+					continue;
+				}
+				const key = +i;
+				const idisplay = `${key + 1}/${argLen}`;
+				const arg = argToArgObj(key, args[i], `[${idisplay}]`);
+
+				if (arg) {
+					retArgs.push(arg);
+
+					// Process sub arguments, if they exist.
+					const parseAs = this.getArgRule(key).parseAs;
+					if (typeof(parseAs) === "function") {
+						try {
+							for (const [subKey, value] of parseAs(args[i])) {
+								const objKey = `${key}|${subKey}`;
+								const display = `[${idisplay}][${subKey}]`;
+								const subArg = argToArgObj(objKey, value, display);
+								if (subArg) {
+									retArgs.push(subArg);
+								}
+							}
+						} catch(err) {
+							logErr(err, "parseAs failed");
+						}
 					}
 				}
 			}
@@ -478,12 +527,13 @@ const rewriter = function(CONFIG) {
 			const ret = {
 				"args" : retArgs,
 				"len" : args.length // len of ret != len of args, if we threw some away
-			}
+			} // TODO len may no longer be needed, now that each arg has a display?
+
 			if (thisArg && thisArg !== window) {
-				const rule = this.getArgRule("thisArg");
-				const a = argToArgObj(rule, "thisArg", thisArg);
-				if (a) {
-					ret["thisArg"] = a;
+				const thisKey = "this";
+				const a = argToArgObj(thisKey, thisArg, "[this]");
+				if (a) { // TODO can I put this in ret.args?
+					ret[thisKey] = a;
 				}
 			}
 
@@ -515,13 +565,16 @@ const rewriter = function(CONFIG) {
 		* @argObj {thisArg} the `this` of a method call/setter
 		**/
 		printArgs(argObj) {
-			function getArgPrinter(fmt, arg, indx, output) {
+			const getArgPrinter = (arg, output) => {
+				const {type, display, key} = arg;
+				const fmt = this.getArgRule(key).format;
+
 				if (!fmt.use) return;
 				const cname = arg.cname
 					? ` constructor:${arg.cname}`
 					: "";
 
-				const end = logGroup(fmt, "%carg%s type:%s%s", fmt.default, indx, arg.type, cname);
+				const end = logGroup(fmt, "%carg%s type:%s%s", fmt.default, display, type, cname);
 				if (output) {
 					if (typeof(output) === "string") {
 						real.log("%c%s", fmt.highlight, output);
@@ -537,25 +590,13 @@ const rewriter = function(CONFIG) {
 				real.logGroupEnd(end);
 			}
 
-			if (argObj.thisArg) {
-				const arg = argObj.thisArg;
-				const format = this.getArgRule(arg.num).format;
+			if (argObj.this) {
+				const arg = argObj.this;
 				// this pargument parsing is not quite right still...
-				getArgPrinter(format, arg, "[this]", arg.orig);
+				getArgPrinter(arg, arg.orig);
 			}
 
-			if (argObj.len === 1 && argObj.args.length == 1) {
-				const arg = argObj.args[0];
-				const format = this.getArgRule(arg.num).format;
-				getArgPrinter(format, arg, "");
-			} else {
-				const total = argObj.len;
-				for (const i of argObj.args) {
-					const format = this.getArgRule(i.num).format;
-					getArgPrinter(format, i, `[${i.num + 1}/${total}]`);
-				}
-			}
-
+			argObj.args.forEach(x => getArgPrinter(x));
 		}
 	};
 
@@ -803,11 +844,7 @@ const rewriter = function(CONFIG) {
 			const title = [
 				s.param? `${display}[${s.param}]: ` :`${display}: `, word
 			];
-			if (argObj.len > 1) {
-				title.push(`${dots} found (arg:`, arg.num, ")");
-			} else {
-				title.push(`${dots} found`);
-			}
+			title.push(`${dots} found (arg:`, arg.display, ")");
 			if (s.decode) {
 				title.push(" [Decoded]");
 			}
@@ -888,13 +925,7 @@ const rewriter = function(CONFIG) {
 		try {
 			argObj = sinkConf.getArgs(args, thisArg);
 		} catch(err) {
-			real.log("%c[ERROR]%c EV args error: %c%s%c on %c%s%c rewriter.js:%s",
-				fmts.interesting.default,
-				fmts.interesting.highlight,
-				fmts.interesting.default, err, fmts.interesting.highlight,
-				fmts.interesting.default, document.location.href, fmts.interesting.highlight,
-				err.lineNumber - LINESTART
-			);
+			logErr(err);
 			return false;
 		}
 
@@ -903,7 +934,7 @@ const rewriter = function(CONFIG) {
 		}
 
 		// TODO allow empty calls to be displayed
-		if (!argObj?.args.length) {
+		if (!Object.keys(argObj.args).length) {
 			return false;
 		}
 
@@ -973,11 +1004,12 @@ const rewriter = function(CONFIG) {
 				return Reflect.construct(...arguments);
 			}
 		}
+
 		function getFunc(n) {
 			const ret = {}
 			ret.where = window;
 			const groups = n.split(".");
-			let i = 0; // outside for loop for a reason
+			let i; // outside for loop for a reason
 			for (i = 0; i < groups.length - 1; i++) {
 				ret.where = ret.where[groups[i]];
 				if (!ret.where) {
@@ -1014,21 +1046,9 @@ const rewriter = function(CONFIG) {
 		delete CONFIG["checkId"];
 	}
 
-	// XXX remove when DB refactor complete
-	if (CONFIG.limits) {
-		console.log("XXX a kind reminder to remove this code");
-	} else {
-		CONFIG.limits = {};
-		for (const [key, value] of Object.entries(CONFIG.formats)) {
-			if (value.limit) {
-				CONFIG.limits[key] = value.limit;
-				delete CONFIG.formats[key].limit;
-			}
-		}
-	}
-
 	// grab real functions before hooking
 	const real = {
+		// log : console.log,
 		log : console.log,
 		debug : console.debug,
 		warn : console.warn,
@@ -1046,6 +1066,20 @@ const rewriter = function(CONFIG) {
 		replaceAll: "".replaceAll,
 	};
 
+	// XXX remove when DB refactor complete
+	if (CONFIG.limits) {
+		real.log("XXX a kind reminder to remove this code");
+	} else {
+		CONFIG.limits = {};
+		for (const [key, value] of Object.entries(CONFIG.formats)) {
+			if (value.limit) {
+				CONFIG.limits[key] = value.limit;
+				delete CONFIG.formats[key].limit;
+			}
+		}
+	}
+
+
 	// build up global sources
 	const SOURCES = [
 		"query", "fragment", "winname", "path", "referer", "localStore",
@@ -1061,7 +1095,7 @@ const rewriter = function(CONFIG) {
 				"sources": "global",
 				"types": CONFIG.types,
 			},
-			"thisArg": {
+			"this": {
 				"types": ["function", "string", "number", "object",
 					"undefined", "boolean", "symbol"]
 			}

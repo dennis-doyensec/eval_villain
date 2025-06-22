@@ -122,6 +122,25 @@ References:
 			"name" : "fetch",
 			"enabled" : true,
 			"pattern" : "fetch",
+			"conf": {
+				"args": {
+					0: {
+						"types": ["string"],
+						"parseAsConf": {
+							"parseAs": "URL",
+							"keys": ["pathname", "hostname"]
+						}
+					},
+					"all": {
+						"types": ["string"],
+						"needles": "global",
+						"sources": "global",
+						"format": {
+							"use": false,
+						},
+					}
+				}
+			},
 			"why":
 `The **fetch** function is commonly used to query API servers with HTTP requests. Injection into the path or domain of the request can cause the request to go to the wrong location. If the results of the request are trusted for DOM operations, then XSS might be possible indirectly. If the request can be redirected to a location that performs a state changing affect, then CSRF might be possible.
 
@@ -130,6 +149,8 @@ References:
 	CSPT Eval Villains way: https://blog.doyensec.com/2024/12/03/cspt-with-eval-villain.html
 	MDN: https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
 `,
+
+
 		}, {
 			"name" : "XMLHttpRequest",
 			"enabled" : true,
