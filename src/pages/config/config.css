@@ -41,6 +41,10 @@ h1 {
     border-bottom: 1px solid #aaa;
 }
 
+.table .no-border {
+	border-bottom: none;
+}
+
 .table .row:nth-child(even) {
     background: #181818;
 }
@@ -85,6 +89,15 @@ h1 {
     position: relative;
     width: 100%;
     min-height: 1px;
+}
+
+.p0 {
+	padding: 0;
+}
+
+.no-overflow {
+	overflow-y: scroll;
+	overflow-x: hidden;
 }
 
 .cell {
@@ -135,6 +148,14 @@ input[type="text"] {
     color: #859900;
     text-align: center;
     font-size: 16px;
+}
+textarea {
+	background-color: transparent;
+	color: #859900;
+	width: 570px;
+	max-width: 570px;
+	border: none;
+	padding: 15px;
 }
 
 .errors {

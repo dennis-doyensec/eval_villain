@@ -1,4 +1,4 @@
-const configList = ["targets", "needles",  "blacklist", "functions", "globals"];
+const configList = ["targets", "needles",  "blacklist", "globals"];
 const normalHeaders = ["enabled", "name", "pattern"];
 
 function getTableData(tblName) {
@@ -239,26 +239,10 @@ async function saveTable(tblName) {
 	return updateBackground();
 }
 
-function onLoad() {
+async function onLoad() {
 	function appendDefault(tblName) {
 		const example = { "name" : "", "enabled" : true, "pattern" : "" }
 		defAddRow(tblName, example, focus=true);
-	}
-
-	function writeDOM(res) {
-		for (const sub of configList) {
-			if (!res[sub]) {
-				console.error("Could not get: " + sub);
-			}
-
-			for (const itr of res[sub]) {
-				defAddRow(sub, itr);
-			}
-		}
-		for (const sub of configList) {
-			validateTable(sub);
-			unsavedTable(sub); // really should never change anything
-		}
 	}
 
 	// set onclick events to default buttons
@@ -276,11 +260,26 @@ function onLoad() {
 	}
 
 	// TODO await and simplify
-	const result = browser.storage.local.get(configList);
-	result.then(
-		writeDOM,
-		err => console.error("failed to get storage: " + err)
-	);
+	const dbConf = await browser.storage.local.get(configList);
+	for (const sub of configList) {
+		if (!dbConf[sub]) {
+			console.error("Could not get: " + sub);
+		}
+
+		for (const itr of dbConf[sub]) {
+			defAddRow(sub, itr);
+		}
+	}
+
+	for (const sub of configList) {
+		validateTable(sub);
+		unsavedTable(sub); // really should never change anything
+	}
+
+	// functions table done differently
+	const funcs = (await browser.storage.local.get("functions")).functions;
+	document.getElementById("functionsJson").value = JSON.stringify(funcs, null, 2);
+
 	// TODO better DB in future, sipler code
 	populateFormats();
 
