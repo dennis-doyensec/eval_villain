@@ -606,8 +606,3 @@ function handleInstalled(details) {
 
 browser.runtime.onMessage.addListener(handleMessage);
 browser.runtime.onInstalled.addListener(handleInstalled);
-
-{ // XXX
-	let confUrl = browser.runtime.getURL("/pages/config/config.html");
-	let tab = browser.tabs.create({url:confUrl});
-}

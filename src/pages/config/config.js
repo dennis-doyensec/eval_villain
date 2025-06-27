@@ -32,6 +32,7 @@ function unsavedTable(tblName) {
 		}
 	}
 
+
 	function compareFormatData(saveData) {
 		for ([save, nm, value] of genFormatPairs(tblName, saveData)) {
 			const test = typeof(save[nm]) == "number"? Number(value): value;
@@ -194,6 +195,12 @@ function *genFormatPairs(tblName, res) {
 	}
 }
 
+function splitCount(str, needle, max) {
+	return str.split(needle, max)
+		.join(needle)
+		.length;
+}
+
 async function formatsSave(tblName) {
 	const res = await browser.storage.local.get("formats");
 
@@ -208,6 +215,128 @@ async function formatsSave(tblName) {
 	browser.storage.local.set(res)
 		.then(updateBackground)
 		.then(() => unsavedTable(tblName));
+}
+
+function checkFunctionJson() {
+	const str = document.getElementById("functionsJson").value;
+	functionsClearErrors();
+	try {
+		const conf = JSON.parse(str);
+		let ret = conf;
+
+		if (!Array.isArray(conf)) {
+			functionsAddError("Functions JSON must be array", 0);
+			return false;
+		}
+
+		for (let i = 0; i < conf.length; i++) {
+			const {name, enabled, pattern} = conf[i];
+
+			// name required
+			if (typeof(name) !== "string") {
+				const loc = splitCount(str, '"name":', i); // bad guess...
+				functionsAddError(`Function[${i}] must have "name" set to a string`, loc);
+				return false;
+			}
+
+			if (!/^[a-zA-Z._ ]+$/.test(name)) {
+				const loc = splitCount(str, '"name":', i + 1);
+				functionsAddError(`Function[${i}] can't have name with special caracters (must match: /^[a-zA-Z._ ]+$/)`, loc);
+				return false;
+			}
+
+
+			// enabled required
+			if (enabled === undefined) {
+				const loc = splitCount(str, '"name":', i + 1);
+				functionsAddError(`Function[${i}]: ${name} needs "enabled" as boolean`, loc);
+				ret = false; // can keep finding bugs in conf
+			} else if (typeof(enabled) !== "boolean") {
+				const loc = splitCount(str, '"name":', i + 1);
+				functionsAddError(`Function[${i}]: ${name} needs "enabled" as boolean`, loc);
+				ret = false; // can keep finding bugs in conf
+			}
+
+			// pattern required
+			if (typeof(pattern) !== "string") {
+				const loc = splitCount(str, '"name":', i + 1);
+				functionsAddError(`Function[${i}]: ${name} needs "pattern" as string`, loc);
+				ret = false; // can keep finding bugs in conf
+				continue;
+			} else {
+				const patErr = validateFunctionsPattern(pattern);
+				if (patErr) {
+					const needle = ret
+						? '"pattern":'
+						: '"name":';
+					const loc = splitCount(str, needle, i + 1);
+					functionsAddError(`Pattern of Function[${i}]${name} ${patErr}`, loc);
+					ret = false; // can keep finding bugs in conf
+					continue;
+				}
+			}
+		}
+		return ret;
+
+	} catch (err) {
+		if (err instanceof SyntaxError) {
+			const {message} = err;
+			const [_, lineNo, col] = /^JSON.parse:.*line (\d+) column (\d+)/.exec(message);
+
+			// changes find how many characters are in the first `line-1` lines
+			const loc = splitCount(str, "\n", parseInt(lineNo) - 1);
+			functionsAddError(message, parseInt(col) + loc);
+			return false;
+		} else {
+			throw err;
+		}
+	}
+
+	return false;
+}
+
+function functionsAddError(msg, cursorLoc) {
+	const funcErrs = document.getElementById("functions-errors");
+	const txtArea = document.getElementById("functionsJson");
+	// add error text to dom
+	const htmlErr = document.createElement("div");
+	htmlErr.innerText =  msg;
+	htmlErr.onclick = () => {
+		txtArea.focus();
+		txtArea.setSelectionRange(cursorLoc, cursorLoc);
+	}
+	htmlErr.onclick();
+	funcErrs.appendChild(htmlErr);
+}
+
+function functionsClearErrors() {
+	const funcErrs = document.getElementById("functions-errors");
+	for (let node of funcErrs.children) {
+		node.remove();
+	}
+}
+
+async function functionsCheckChanges() {
+	// validate JSON
+	const saveButton = document.getElementById("save-functions");
+	if (!checkFunctionJson()) {
+		saveButton.disabled = true;
+		return;
+	}
+
+	const dbFuncs = (await browser.storage.local.get("functions")).functions;
+	const newFuncs = document.getElementById("functionsJson").value;
+	const newTest = JSON.stringify(JSON.parse(newFuncs)); // remove whitespace
+	const hasOLdValue = newTest == JSON.stringify(dbFuncs);
+	saveButton.disabled = hasOLdValue;
+}
+
+async function functionsSave() {
+	const jsonFuncs = checkFunctionJson();
+	if (jsonFuncs) {
+		browser.storage.local.set({"functions": jsonFuncs})
+		.then(functionsCheckChanges);
+	}
 }
 
 function getDefElements(form) {
@@ -278,7 +407,9 @@ async function onLoad() {
 
 	// functions table done differently
 	const funcs = (await browser.storage.local.get("functions")).functions;
-	document.getElementById("functionsJson").value = JSON.stringify(funcs, null, 2);
+	const funcText = document.getElementById("functionsJson");
+	funcText.value = JSON.stringify(funcs, null, 2);
+	funcText.onblur = functionsCheckChanges;
 
 	// TODO better DB in future, sipler code
 	populateFormats();
@@ -320,6 +451,7 @@ async function populateFormats() {
 	document.getElementById("save-formats").onclick = () => formatsSave("formats");
 	document.getElementById("test-formats").onclick = colorTest;
 	document.getElementById("save-limits").onclick = () => formatsSave("limits");
+	document.getElementById("save-functions").onclick = functionsSave;
 
 	const {formats} = await browser.storage.local.get("formats");
 	if (!formats) {

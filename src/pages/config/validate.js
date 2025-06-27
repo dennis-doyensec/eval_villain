@@ -2,7 +2,6 @@ const errors = {
 	targets: [],
 	needles: [],
 	blacklist: [],
-	functions: [],
 	globals: [],
 	formats: [],
 	limits: []
@@ -52,8 +51,8 @@ function validate(dom, tblName=null) {
 			pattern: validateNeedlesPattern
 		},
 		functions: {
-			name: validateName,
-			pattern: validateFunctionsPattern
+			name: () => {throw `unused`},
+			pattern: () => {throw `unused`},
 		},
 		globals: {
 			name: () => false,
@@ -191,8 +190,11 @@ function validateTargetPattern(dom) {
 
 /*
  * heavily inspired by switcheroo.js, update one, update the other
+ * TODO simplify
+ *
+ *
 */
-function validateFunctionsPattern(dom) {
+function validateFunctionsPattern(sinkName) {
 	function getFunc(n) {
 		let ret = {}
 		ret.where = window;
@@ -218,12 +220,11 @@ function validateFunctionsPattern(dom) {
 		}
 	}
 
-	let evname = dom.value;
-	if (evname.length === 0) {
+	if (sinkName.length === 0) {
 		return "can't be empty";
 	}
 
-	var ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(evname);
+	var ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(sinkName);
 	if (ownprop) {
 		let prop = ownprop[1];
 		let f = getFunc(ownprop[2]);
@@ -233,7 +234,7 @@ function validateFunctionsPattern(dom) {
 		try{
 			var orig = Object.getOwnPropertyDescriptor(f.where.prototype, f.leaf)[prop];
 		} catch(err) {
-			console.error(`Err parsing ${evname}: ${err}`);
+			console.error(`Err parsing ${sinkName}: ${err}`);
 			return `Object.getOwnPropertyDescriptor().${prop} error`;
 		}
 		if (!orig) {
@@ -241,15 +242,15 @@ function validateFunctionsPattern(dom) {
 		}else{
 			return funcCheck(orig);
 		}
-	} else if (!/^[a-zA-Z.]+$/.test(evname)) {
-		if (/[()]/.test(evname)) {
+	} else if (!/^[a-zA-Z.]+$/.test(sinkName)) {
+		if (/[()]/.test(sinkName)) {
 			return "characters `(` and `)` only used for setters (ie:setter(innerHTML))";
 		}else{
 			let match = /^[a-zA-Z.]*(.)/.exec(name);
 			return `invalid character '${match[1]}'`;
 		}
 	} else {
-		let f = getFunc(evname);
+		let f = getFunc(sinkName);
 		if (f) {
 			return funcCheck(f.where[f.leaf]);
 		} else {
