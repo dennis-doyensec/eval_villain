@@ -75,6 +75,16 @@ References:
 			"name" : "setTimeout",
 			"enabled" : true,
 			"pattern" : "setTimeout",
+			"conf": {
+				"args": {
+					"0": {
+						"needles": "global",
+						"sources": "global",
+						"types": ["string"],
+						"format": {"use": false}
+					}
+				}
+			},
 			"why":
 `The **setTimeout** function can accept as a string to execute as JavaScript. Injection into the string can cause XSS.
 
@@ -85,6 +95,16 @@ References:
 			"name" : "setInterval",
 			"enabled" : true,
 			"pattern" : "setInterval",
+			"conf": {
+				"args": {
+					"0": {
+						"needles": "global",
+						"sources": "global",
+						"types": ["string"],
+						"format": {"use": false}
+					}
+				}
+			},
 			"why":
 `The **setInterval** function can accept as a string to execute as JavaScript. Injection into the string can cause XSS.
 
@@ -149,12 +169,29 @@ References:
 	CSPT Eval Villains way: https://blog.doyensec.com/2024/12/03/cspt-with-eval-villain.html
 	MDN: https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
 `,
-
-
 		}, {
 			"name" : "XMLHttpRequest",
 			"enabled" : true,
 			"pattern" : "value(XMLHttpRequest.open)",
+			"conf": {
+				"args": {
+					1: {
+						"types": ["string"],
+						"parseAsConf": {
+							"parseAs": "URL",
+							"keys": ["pathname", "hostname"]
+						}
+					},
+					"all": {
+						"types": ["string"],
+						"needles": "global",
+						"sources": "global",
+						"format": {
+							"use": false,
+						},
+					}
+				}
+			},
 			"why":
 `The **XMLHttpRequest.open** function is commonly used to query API servers with HTTP requests. Injection into the path or domain of the request can cause the request to go to the wrong location. If the results of the request are trusted for DOM operations, then XSS might be possible indirectly. If the request can be redirected to a location that performs a state changing affect, then CSRF might be possible.
 
