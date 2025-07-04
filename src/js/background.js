@@ -524,7 +524,7 @@ async function getConfigForRegister() {
 			config[i.name] = i.pattern;
 		}
 	}
-	if (config.formats?.userSource && !("sourcer" in Object.keys(config))) {
+	if (config.formats?.userSource && typeof(config.sourcer) !== "string") {
 		delete config.formats.userSource;
 	}
 
