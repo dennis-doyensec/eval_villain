@@ -314,6 +314,7 @@ const colBlue = "color:#147599";
 const colRed = "color:red";
 var config =  {
 	"sourcer": "evSourcer",
+	"sinker": "evSinker",
 	"formats" : {
 		"title" : {
 			"pretty" : "Normal Results",

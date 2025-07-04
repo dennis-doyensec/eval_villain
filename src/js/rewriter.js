@@ -912,9 +912,9 @@ const rewriter = function(CONFIG) {
 
 	/**
 	* Parse all arguments for function `name` and pretty print them in the console
-	* @param {SearchBundle}	sinkConf Used to check if a call is interesting
-	* @param {string}	name Name of function that is being hooked
-	* @param {array}	args array of arguments
+	* @param {SinkConf}	conf obj representing interest rules per arg.
+	* @param {object}	args The `arguments` passed to the original sink.
+	* @param {any}	thisArg the `this` passed to original sink, if it exists.
 	* @returns {boolean} Always returns `false`
 	**/
 	function EvalVillainHook(conf, args, thisArg) {
@@ -926,11 +926,13 @@ const rewriter = function(CONFIG) {
 			argObj = sinkConf.getArgs(args, thisArg);
 		} catch(err) {
 			logErr(err);
+			real.dir(args);
+			real.dir(thisArg);
 			return false;
 		}
 
 		if (!sinkConf.runPreInterest(argObj)) {
-			return;
+			return false;
 		}
 
 		// TODO allow empty calls to be displayed
@@ -946,7 +948,7 @@ const rewriter = function(CONFIG) {
 			? fmts.interesting
 			: fmts.title;
 		if (!format.use) {
-			return;
+			return false;
 		}
 
 		const titleGrp = printTitle(name, format, interestingPrint.length);
@@ -1119,7 +1121,12 @@ const rewriter = function(CONFIG) {
 			pattern: CONFIG.sinkArg,
 			conf: GLOB_SINK_CONF,
 		}
-		window[CONFIG.sinker] = (x,y) => EvalVillainHook(GLOB_SINK_CONF, x, y);
+
+		window[CONFIG.sinker] = function(sinkName, ...args) {
+			conf.name = sinkName;
+			EvalVillainHook(conf, args);
+			return false;
+		};
 		delete CONFIG.sinker;
 	}
 

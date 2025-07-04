@@ -351,6 +351,7 @@
 	// argArr fallthrough from abouve
 	testNormal(t, "postMessage registered", argArr);
 
+
 	// test fetch
 	t = 'fetch test interest';
 	line = ["https://example.com/", "asdf"];
@@ -373,4 +374,27 @@
 		},
 	];
 	testInterset(t, "fetch", argArr, intArr);
+
+
+	// evSinker
+	t = 'evSinker test';
+	line = ['azzzzz', 'asdf', 'bbbbb'];
+	value = line.join("");
+	evSinker('sinkerTitle', value);
+
+	argArr = [
+		{value: value, key: 0, display: '[1/1]'},
+	];
+	intArr = [
+		{
+			decoded: false,
+			reason: "needle",
+			needle: "asdf",
+			display: '[1/1]',
+			line: line,
+			arg: 0,
+		},
+	];
+	testInterset(t, "sinkerTitle", argArr, intArr);
 }
+
