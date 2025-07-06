@@ -39,7 +39,7 @@ References:
 `The outerHTML has similar security concerns as innerHTML, it adds . Unfiltered user input here is one of the most common DOM XSS vectors. Script tags are not allowed but **<img src=1 onerror=alert(1)>** will work.
 
 References:
-	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML
+	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Element/outerHTML
 `,
 		}, {
 			"name" : "createContextualFragment",

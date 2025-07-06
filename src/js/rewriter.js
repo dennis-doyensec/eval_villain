@@ -1019,16 +1019,16 @@ const rewriter = function(CONFIG) {
 				}
 			}
 			ret.leaf = groups[i];
-			return ret ? ret : null;
+			return ret;
 		}
 
-		const ownprop = /^(set|value)\(([a-zA-Z.]+)\)\s*$/.exec(pattern);
+		const ownprop = /^(\w*)\(([a-zA-Z.]+)\)\s*$/.exec(pattern);
 		const ep = new evProxy();
 		if (ownprop) {
-			const prop = ownprop[1];
-			const f = getFunc(ownprop[2]);
-			const orig = Object.getOwnPropertyDescriptor(f.where.prototype, f.leaf)[prop];
-			Object.defineProperty(f.where.prototype, f.leaf, {[prop] : new Proxy(orig, ep)});
+			const [_, prop, pattern] = ownprop;
+			const {where, leaf} = getFunc(pattern);
+			const orig = Object.getOwnPropertyDescriptor(where.prototype, leaf)[prop];
+			Object.defineProperty(where.prototype, leaf, {[prop] : new Proxy(orig, ep)});
 		} else if (!/^[a-zA-Z.]+$/.test(pattern)) {
 			real.log("[EV] name: %s invalid, not hooking", pattern);
 			real.dir(pattern);
