@@ -422,11 +422,19 @@ const rewriter = function(CONFIG) {
 				this.perArgRules[argName] = rule;
 			}
 
-			if (conf.onPreInterest) {
+			const {onPreInterest, onPostInterest} = conf;
+			if (onPreInterest) {
 				try {
-					this.onPreInterest = new Function("argObj", "real", conf.onPreInterest);
+					this.onPreInterest = new Function("argObj", "real", onPreInterest);
 				} catch(err) {
-					logErr(err, "onPreInterest function execution");
+					logErr(err, "Failed to create onPreInterest");
+				}
+			}
+			if (onPostInterest) {
+				try {
+					this.onPostInterest = new Function("interest", "argObj", "real", onPostInterest);
+				} catch(err) {
+					logErr(err, "Failed to create onPostInterest");
 				}
 			}
 		}
@@ -558,6 +566,24 @@ const rewriter = function(CONFIG) {
 			return true;
 		}
 
+		runPostInterest(interest, argObj) {
+			if (this.onPostInterest) {
+				try {
+					return this.onPostInterest(interest, argObj, real);
+				} catch(err) {
+					const fmts = CONFIG.formats.interesting;
+					real.log("%c[ERROR]%c.onPostInterest: %c%s%c on %c%s%c rewriter.js:%s",
+						fmts.default, fmts.highlight, fmts.default, err,
+						fmts.highlight, fmts.default, document.location.href,
+						fmts.highlight, err.lineNumber - LINESTART
+					);
+					real.dir(err);
+					real.log(this.onPreInterest);
+				}
+			}
+			return true;
+		}
+
 		/**
 		* Print all the arguments to the hooked funciton
 		*
@@ -598,6 +624,18 @@ const rewriter = function(CONFIG) {
 
 			argObj.args.forEach(x => getArgPrinter(x));
 		}
+
+		getInterest(argObj) {
+			// update changing lists
+			["query", "fragment", "winname", "path"]
+				.forEach(nm => srcRefresher[nm]());
+
+			this.runPreInterest(argObj);
+			const interest = Array.from(this.interestIterator(argObj));
+			this.runPostInterest(interest);
+			return interest;
+		}
+
 	};
 
 	let rotateWarnAt = 8;
@@ -823,91 +861,72 @@ const rewriter = function(CONFIG) {
 	}
 
 	/**
-	* Check interest and get printers for each interesting result
-	*
-	* @argObj {Array} args array of arguments
-	**/
-	function getInterest(argObj, sinkConf) { // TODO: intigrate into sinkconf?
-
-		/**
-		 * Builds a printer for an interesring argument
-		 */
-		function printer(s, arg) {
-			const fmt = CONFIG.formats[s.name];
-			const display = s.display? s.display: s.name;
-			let word = s.search;
-			let dots = "";
-			if (word.length > 80) {
-				dots = "..."
-				word = s.search.substr(0, 77);
-			}
-			const title = [
-				s.param? `${display}[${s.param}]: ` :`${display}: `, word
-			];
-			title.push(`${dots} found (arg:`, arg.display, ")");
-			if (s.decode) {
-				title.push(" [Decoded]");
-			}
-
-			const end = zebraGroup(title, fmt);
-			if (dots) {
-				const d = "Entire needle:"
-				real.logGroupCollapsed(d);
-				real.log(s.search);
-				real.logGroupEnd(d);
-			}
-			if (s.decode) { // TODO probably should be moved to the recursve decoder area
-				const d = "Encoder function:";
-				real.logGroupCollapsed(d);
-				let add = "\t";
-				let pmtwo = false;
-				switch (s.name) { // TODO: this should be moved to interestBundle, I think
-				case "path":
-					if (!s.param) break;
-					add += `if (y) {\n\t\t`
-					add += `const pth = document.location.pathname.substring(1).split('/');\n\t\t`;
-					add += `pth[${s.param}] = x;\n\t\t`;
-					add += `document.location.pathname = '/' + pth.join('/');\n\t`;
-					add += `}\n\t`
-					pmtwo = true;
-					break;
-				case "localStore":
-					if (!s.param) break;
-					add += `if (y) localStorage.setItem("${s.param}", x);\n\t`;
-					pmtwo = true;
-					break;
-				case "query":
-					if (!s.param) break;
-					add +=  `const _ = new URL(window.location.href);\n\t`
-					add += `// next line might need some changes\n\t`;
-					add += `_.searchParams.set('${real.replaceAll(s.param, '"', '\x22')}', decodeURIComponent(x));\n\t`;
-					add += `x = _.href;\n\t`;
-					add += `if (y) window.location = x;\n\t`
-					pmtwo = true;
-					break;
-				case "winname":
-					add +=  `if (y) window.name = x;\n\t`
-					pmtwo = true;
-					break;
-				}
-
-				real.log(`encoder = ${pmtwo ? "(x, y)" : "x"} => {\n${s.decode}${add}return x;\n}//`);
-				real.logGroupEnd(d);
-			}
-			zebraLog(s.split, fmt);
-			real.logGroupEnd(end);
+	 * Builds a printer for an interesring argument
+	 */
+	function printInterest(match, arg) {
+		const fmt = CONFIG.formats[match.name];
+		const display = match.display? match.display: match.name;
+		let word = match.search;
+		let dots = "";
+		if (word.length > 80) {
+			dots = "..."
+			word = match.search.substr(0, 77);
+		}
+		const title = [
+			match.param? `${display}[${match.param}]: ` :`${display}: `, word
+		];
+		title.push(`${dots} found (arg:`, arg.display, ")");
+		if (match.decode) {
+			title.push(" [Decoded]");
 		}
 
-		// update changing lists
-		["query", "fragment", "winname", "path"]
-			.forEach(nm => srcRefresher[nm]());
-
-		const ret = [];
-		for (const [match, arg] of sinkConf.interestIterator(argObj)) {
-			ret.push(() => printer(match, arg));
+		const end = zebraGroup(title, fmt);
+		if (dots) {
+			const d = "Entire needle:"
+			real.logGroupCollapsed(d);
+			real.log(match.search);
+			real.logGroupEnd(d);
 		}
+		if (match.decode) { // TODO probably should be moved to the recursve decoder area
+			const d = "Encoder function:";
+			real.logGroupCollapsed(d);
+			let add = "\t";
+			let pmtwo = false;
+			switch (match.name) { // TODO: this should be moved to interestBundle, I think
+			case "path":
+				if (!match.param) break;
+				add += `if (y) {\n\t\t`
+				add += `const pth = document.location.pathname.substring(1).split('/');\n\t\t`;
+				add += `pth[${match.param}] = x;\n\t\t`;
+				add += `document.location.pathname = '/' + pth.join('/');\n\t`;
+				add += `}\n\t`
+				pmtwo = true;
+				break;
+			case "localStore":
+				if (!match.param) break;
+				add += `if (y) localStorage.setItem("${match.param}", x);\n\t`;
+				pmtwo = true;
+				break;
+			case "query":
+				if (!match.param) break;
+				add +=  `const _ = new URL(window.location.href);\n\t`
+				add += `// next line might need some changes\n\t`;
+				add += `_.searchParams.set('${real.replaceAll(match.param, '"', '\x22')}', decodeURIComponent(x));\n\t`;
+				add += `x = _.href;\n\t`;
+				add += `if (y) window.location = x;\n\t`
+				pmtwo = true;
+				break;
+			case "winname":
+				add +=  `if (y) window.name = x;\n\t`
+				pmtwo = true;
+				break;
+			}
 
-		return ret;
+			real.log(`encoder = ${pmtwo ? "(x, y)" : "x"} => {\n${match.decode}${add}return x;\n}//`);
+			real.logGroupEnd(d);
+		}
+		zebraLog(match.split, fmt);
+		real.logGroupEnd(end);
 	}
 
 	/**
@@ -941,17 +960,17 @@ const rewriter = function(CONFIG) {
 		}
 
 		// does this call have an interesting result?
-		const interestingPrint = getInterest(argObj, sinkConf);
+		const interest = sinkConf.getInterest(argObj);
 
 		// is there any interest?
-		const format = interestingPrint.length
+		const format = interest.length
 			? fmts.interesting
 			: fmts.title;
 		if (!format.use) {
 			return false;
 		}
 
-		const titleGrp = printTitle(name, format, interestingPrint.length);
+		const titleGrp = printTitle(name, format, interest.length);
 		if (conf.why) {
 			const end = logGroup(CONFIG.formats.why, "Explanation:")
 			zebraLog(conf.why, CONFIG.formats.why);
@@ -960,7 +979,7 @@ const rewriter = function(CONFIG) {
 		sinkConf.printArgs(argObj);
 
 		// print all intereresting reuslts
-		interestingPrint.forEach(x=>x());
+		interest.forEach(arr => printInterest(...arr));
 
 		// stack display
 		// don't put this into a function, it will be one more thing on the call

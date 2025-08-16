@@ -500,7 +500,25 @@ var config =  {
 					}
 				}
 			}
-		}
+		}, 
+		// {
+		// 	"name" : "setAttribute",
+		// 	"enabled" : true,
+		// 	"pattern" : "value(Element.setAttribute)",
+		// 	"conf": {
+		// 		"onPostInterest": "real.dir(arguments);",
+		// 		"args": {
+		// 			"all": {
+		// 				"types": ["string"],
+		// 				"needles": "global",
+		// 				"sources": "global",
+		// 				"format": {
+		// 					"use": false,
+		// 				},
+		// 			}
+		// 		}
+		// 	},
+		// }
 	],
 	"types" : ["string", "function"],
 };
