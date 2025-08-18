@@ -473,7 +473,11 @@ var config =  {
 						"types": ["function"],
 						"format": {
 							"use": true,
-						}
+						},
+						"argBlacklist": [
+							"/^\\s*\\/\\/\\s*EVDONE[\\s:]*/m",
+						],
+						"requiredArg": true, // failed blacklist means thorwn away
 					},
 				}
 			}

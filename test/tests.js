@@ -396,5 +396,15 @@
 		},
 	];
 	testInterset(t, "sinkerTitle", argArr, intArr);
+
+
+	// addEventListener not interesting because already done
+	t = 'postMessage handler blacklisted'
+	const doneHandleFunc = () => {
+		// EVDONE
+	};
+	addEventListener("message", doneHandleFunc);
+	argArr = [{value: doneHandleFunc, key: 1, display: '[2/2]'}];
+	testNormal(t, "postMessage registered", argArr);
 }
 

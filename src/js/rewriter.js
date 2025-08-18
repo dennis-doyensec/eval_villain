@@ -263,12 +263,12 @@ const rewriter = function(CONFIG) {
 			}
 			this.needles = [];
 			this.regNeedle = [];
-			const test = /^\/(.*)\/(i|g|gi|ig)?$/;
+			const test = /^\/(.*)\/([gim]{0,3})$/;
 			for (const need of needleList) {
 				const s = test.exec(need);
 				if (s) {
-					const reg = new RegExp(s[1],
-						s[2] === undefined? "": s[2]);
+					const flags = s[2] === undefined? "": s[2]
+					const reg = new RegExp(s[1], flags);
 					this.regNeedle.push(reg);
 				} else {
 					this.needles.push(need);
@@ -328,6 +328,10 @@ const rewriter = function(CONFIG) {
 			this.needles = argConf.needles === "global"
 				? NEEDLES
 				: new NeedleBundle(argConf.needles);
+
+			if (Array.isArray(argConf.argBlacklist)) {
+				this.argBlacklist = new NeedleBundle(argConf.argBlacklist);
+			}
 
 			const srcs = argConf?.sources === "global"
 				? SOURCES
@@ -415,11 +419,15 @@ const rewriter = function(CONFIG) {
 	 */
 	class SinkConf {
 		perArgRules = {};
+		requiredArgs = new Set();
 
 		constructor(conf) {
 			for (const [argName, argConf] of Object.entries(conf.args)) {
 				const rule = new SinkArgConf(argConf);
 				this.perArgRules[argName] = rule;
+				if (argConf.requiredArg) {
+					this.requiredArgs.add(argName);
+				}
 			}
 
 			const {onPreInterest, onPostInterest} = conf;
@@ -441,6 +449,18 @@ const rewriter = function(CONFIG) {
 
 		getArgRule(argKey) {
 			return this.perArgRules[argKey] ?? this.perArgRules.all;
+		}
+
+		hasRequiredArgs(argObj) {
+			if (this.requiredArgs.size <= 0) {
+				return true;
+			}
+
+			const s = new Set(argObj.args.filter(x => !x.blacklisted).map(x => "" + x.key));
+			if (argObj.this) {
+				s.add("this");
+			}
+			return this.requiredArgs.difference(s).size == 0;
 		}
 
 		*interestIterator(argObj) {
@@ -475,7 +495,7 @@ const rewriter = function(CONFIG) {
 					if (t === "object") {
 						try {
 							s = real.JSON.stringify(s);
-						} catch(err) { // ciclic objects
+						} catch(err) { // cyclic objects
 							logErr(err, "Failed to stringify argument");
 						}
 						cname = arg?.constructor.name ?? t;
@@ -513,8 +533,14 @@ const rewriter = function(CONFIG) {
 				if (arg) {
 					retArgs.push(arg);
 
+					const {parseAs, argBlacklist} = this.getArgRule(key);
+
+					// don't add to args if it's blacklisted
+					if (argBlacklist?.matchAny(arg.str)) {
+						arg.blacklisted = true;
+					}
+
 					// Process sub arguments, if they exist.
-					const parseAs = this.getArgRule(key).parseAs;
 					if (typeof(parseAs) === "function") {
 						try {
 							for (const [subKey, value] of parseAs(args[i])) {
@@ -631,6 +657,9 @@ const rewriter = function(CONFIG) {
 				.forEach(nm => srcRefresher[nm]());
 
 			this.runPreInterest(argObj);
+			if (!this.hasRequiredArgs(argObj)) {
+				return [];
+			}
 			const interest = Array.from(this.interestIterator(argObj));
 			this.runPostInterest(interest);
 			return interest;
