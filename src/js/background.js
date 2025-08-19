@@ -128,12 +128,18 @@ References:
 						"types": ["function"],
 						"format": {
 							"use": true,
-						}
+						},
+						"argBlacklist": [
+							"/^\\s*\\/\\/\\s*EVDONE[\\s:]*/m",
+						],
+						"requiredArg": true,
 					},
 				}
 			},
 			"why":
 `Calling **addEventListener("message", func)** results in registering the **func** function as a **postMessage** handler. This function will process **postMessag**s from other windows, cross origin. So if these requests are mishandled, a XSS might be possible. To test, click the displayed function below and check if the **origin** of the message is checked correctly. Alternatively, you can add a "conditional breakpoint" in the debugger that uses Eval Villains **evSinker** global to add the **data** of the message to Eval Villain sources (Something like: **evSinker("postMessage handler", msg.data, true))**
+
+Note: If you add a comment **// EVDONE** to the handler function, this will stop warning you. This is due to the **argBlacklist** and **requiredArg** config options of argument **1**.
 
 References:
 	MDN: https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage#security_concerns
