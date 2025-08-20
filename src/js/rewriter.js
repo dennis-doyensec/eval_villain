@@ -175,7 +175,7 @@ const rewriter = function(CONFIG) {
 				// ex: evSourcer("Response from fetch", resp.json(), true)
 				// debug=true results in a console.debug for each source injested
 				if (debug) {
-					const o = typeof(src_val) === 'string'? src_val: real.JSON.stringify(src_val);
+					const o = typeof(src_val) === 'string'? src_val: real.jstringify(src_val);
 					real.debug(`[EV] ${srcer}[${src_name}] from ${document.location.origin}  added:\n ${o}`);
 				}
 				addToFifo({
@@ -498,7 +498,7 @@ const rewriter = function(CONFIG) {
 				if (t !== "string") {
 					if (t === "object") {
 						try {
-							s = real.JSON.stringify(s);
+							s = real.jstringify(s);
 						} catch(err) { // cyclic objects
 							logErr(err, "Failed to stringify argument");
 						}
@@ -695,7 +695,7 @@ const rewriter = function(CONFIG) {
 
 		function prettyJson(s, tabs) {
 			return myReplaceAll(
-				real.JSON.stringify(s, null, 2),
+				real.jstringify(s, null, 2),
 				'\n', '\n' + '\t'.repeat(tabs));
 		}
 
@@ -735,7 +735,7 @@ const rewriter = function(CONFIG) {
 
 		function* decodeObject(o, decoded, fwd) {
 			for (const prop in o) {
-				yield *decodeAny(o[prop], decoded, fwd+`[${real.JSON.stringify(prop)}]`);
+				yield *decodeAny(o[prop], decoded, fwd+`[${real.jstringify(prop)}]`);
 			}
 		}
 
@@ -753,7 +753,7 @@ const rewriter = function(CONFIG) {
 
 			// JSON
 			try {
-				const dec = real.JSON.parse(s);
+				const dec = real.jsparse(s);
 				if (dec) {
 					const fwd = `\t{\n\t\tlet _ = ${prettyJson(dec, 2)};\n\t\t_`;
 					yield *decodeAny(dec, `\t\tx = JSON.stringify(_);\n\t}\n${decoded}`, fwd);
@@ -778,11 +778,11 @@ const rewriter = function(CONFIG) {
 				// }
 
 				// query string of URL
-				for (const [key, value] of getAllQueryParams(url.search)) {
+				for (const [key, value] of getAllQueryParams(url.search)) { // TODO test this logic
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL(${my.JSON.stringify(s)});\n`
-						+ `\t\t_.searchParams.set(${my.JSON.stringify(s)}, decodeURIComponent(x));\n`
+						+ `\t\tconst _ = new URL(${real.jstringify(s)});\n`
+						+ `\t\t_.searchParams.set(${real.jstringify(s)}, decodeURIComponent(x));\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
 					+ decoded;
@@ -791,7 +791,7 @@ const rewriter = function(CONFIG) {
 				if (url.hash.length > 1) {
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL(${real.JSON.stringify(s)});\n`
+						+ `\t\tconst _ = new URL(${real.jstringify(s)});\n`
 						+ `\t\t_.hash = x;\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
@@ -800,7 +800,7 @@ const rewriter = function(CONFIG) {
 				}
 			} catch (err) {
 				if (url) {
-					real.error("Got error during decoding: %s", JSON.stringify(err.name));
+					logErr(err, "Got error during decoding");
 				}
 			}
 
@@ -930,21 +930,21 @@ const rewriter = function(CONFIG) {
 				if (!match.param) break;
 				add += `if (y) {\n\t\t`
 				add += `const pth = document.location.pathname.substring(1).split('/');\n\t\t`;
-				add += `pth[${real.JSON.stringify(match.param)}] = x;\n\t\t`;
+				add += `pth[${real.jstringify(match.param)}] = x;\n\t\t`;
 				add += `document.location.pathname = '/' + pth.join('/');\n\t`;
 				add += `}\n\t`
 				pmtwo = true;
 				break;
 			case "localStore":
 				if (!match.param) break;
-				add += `if (y) localStorage.setItem(${real.JSON.stringify(match.param)}, x);\n\t`;
+				add += `if (y) localStorage.setItem(${real.jstringify(match.param)}, x);\n\t`;
 				pmtwo = true;
 				break;
 			case "query":
 				if (!match.param) break;
 				add +=  `const _ = new URL(window.location.href);\n\t`
 				add += `// next line might need some changes\n\t`;
-				add += `_.searchParams.set(${real.JSON.stringify(match.param)}, x);\n\t`;
+				add += `_.searchParams.set(${real.jstringify(match.param)}, x);\n\t`;
 				add += `x = _.href;\n\t`;
 				add += `if (y) window.location = x;\n\t`
 				pmtwo = true;
@@ -1112,7 +1112,8 @@ const rewriter = function(CONFIG) {
 		logGroupEnd : console.groupEnd,
 		logGroupCollapsed : console.groupCollapsed,
 		trace : console.trace,
-		JSON : JSON,
+		jstringify: JSON.stringify,
+		jsparse: JSON.parse,
 		localStorage: localStorage,
 		decodeURIComponent : decodeURIComponent,
 		decodeURI : decodeURI,

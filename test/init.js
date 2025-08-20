@@ -457,6 +457,14 @@ var config =  {
 			"pattern": "document.writeln",
 			"why": [""],
 		}, {
+			"name": "JSON.stringify",
+			"pattern": "JSON.stringify",
+			"why": [""],
+		}, {
+			"name": "JSON.parse",
+			"pattern": "JSON.parse",
+			"why": [""],
+		}, {
 			"name": "postMessage registered",
 			"why": [""],
 			"pattern": "window.addEventListener",
