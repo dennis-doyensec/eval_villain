@@ -21,6 +21,10 @@ const rewriter = function(CONFIG) {
 		}
 	}
 
+	function myReplaceAll(str, needle, update) {
+		return real.replaceAll.apply(str, [needle, update]);
+	}
+
 	/**
 	 * Helper function, choses console.group vs console.groupCollapsed by bool
 	 */
@@ -690,7 +694,7 @@ const rewriter = function(CONFIG) {
 		}
 
 		function prettyJson(s, tabs) {
-			return real.replaceAll(
+			return myReplaceAll(
 				real.JSON.stringify(s, null, 2),
 				'\n', '\n' + '\t'.repeat(tabs));
 		}
@@ -765,7 +769,7 @@ const rewriter = function(CONFIG) {
 				// if (url.hostname != location.hostname) {
 				// 	const dec = ``
 				// 		+ `\t{\n`
-				// 		+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
+				// 		+ `\t\tconst _ = new URL("${myReplaceAll(s, '"', "%22")}");\n`
 				// 		+ `\t\t_.hostname = x;\n`
 				// 		+ `\t\tx = _.href;\n`
 				// 		+ `\t}\n`
@@ -777,8 +781,8 @@ const rewriter = function(CONFIG) {
 				for (const [key, value] of getAllQueryParams(url.search)) {
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
-						+ `\t\t_.searchParams.set('${real.replaceAll(key, '"', '\x22')}', decodeURIComponent(x));\n`
+						+ `\t\tconst _ = new URL(${my.JSON.stringify(s)});\n`
+						+ `\t\t_.searchParams.set(${my.JSON.stringify(s)}, decodeURIComponent(x));\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
 					+ decoded;
@@ -787,7 +791,7 @@ const rewriter = function(CONFIG) {
 				if (url.hash.length > 1) {
 					const dec = ``
 						+ `\t{\n`
-						+ `\t\tconst _ = new URL("${real.replaceAll(s, '"', "%22")}");\n`
+						+ `\t\tconst _ = new URL(${real.JSON.stringify(s)});\n`
 						+ `\t\t_.hash = x;\n`
 						+ `\t\tx = _.href;\n`
 						+ `\t}\n`
@@ -810,9 +814,9 @@ const rewriter = function(CONFIG) {
 			} catch (_) {/**/}
 
 			// string replace
-			const dec = real.replaceAll(s, "+", " ");
+			const dec = myReplaceAll(s, "+", " ");
 			if (dec !== s) {
-				yield *decodeAll(dec, `\tx = real.replaceAll(x, "+", " ");\n${decoded}`);
+				yield *decodeAll(dec, `\tx = x.replaceAll(x, "+", " ");\n${decoded}`);
 			}
 
 			if (!s.includes("%")) {
@@ -926,21 +930,21 @@ const rewriter = function(CONFIG) {
 				if (!match.param) break;
 				add += `if (y) {\n\t\t`
 				add += `const pth = document.location.pathname.substring(1).split('/');\n\t\t`;
-				add += `pth[${match.param}] = x;\n\t\t`;
+				add += `pth[${real.JSON.stringify(match.param)}] = x;\n\t\t`;
 				add += `document.location.pathname = '/' + pth.join('/');\n\t`;
 				add += `}\n\t`
 				pmtwo = true;
 				break;
 			case "localStore":
 				if (!match.param) break;
-				add += `if (y) localStorage.setItem("${match.param}", x);\n\t`;
+				add += `if (y) localStorage.setItem(${real.JSON.stringify(match.param)}, x);\n\t`;
 				pmtwo = true;
 				break;
 			case "query":
 				if (!match.param) break;
 				add +=  `const _ = new URL(window.location.href);\n\t`
 				add += `// next line might need some changes\n\t`;
-				add += `_.searchParams.set('${real.replaceAll(match.param, '"', '\x22')}', decodeURIComponent(x));\n\t`;
+				add += `_.searchParams.set(${real.JSON.stringify(match.param)}, x);\n\t`;
 				add += `x = _.href;\n\t`;
 				add += `if (y) window.location = x;\n\t`
 				pmtwo = true;
