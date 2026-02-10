@@ -500,7 +500,7 @@ const rewriter = function(CONFIG) {
 						try {
 							s = real.jstringify(s);
 						} catch(err) { // cyclic objects
-							logErr(err, "Failed to stringify argument");
+							// logErr(err, "Failed to stringify argument");
 						}
 						cname = arg?.constructor.name ?? t;
 					} else {
